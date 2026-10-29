@@ -32,14 +32,14 @@ Esses dois documentos são a especificação. Em caso de dúvida, eles mandam. S
 - O painel nunca chama IA. IA só entra na instalação e na entrevista. Nota e mensagem saem de regras e modelos salvos.
 - O servidor local valida `Host`, exige token nas rotas que alteram dados e não libera CORS.
 - Nenhum dado de lead sai do computador da pessoa. Sem telemetria.
-- O prompt de instalação nunca manda desligar antivírus, firewall ou permissões de segurança da ferramenta de IA, e pede confirmação antes de cada passo que muda o computador.
+- O prompt de instalação nunca manda desligar antivírus, firewall ou permissões de segurança da ferramenta de IA, e pede confirmação antes de cada passo que muda o computador. Ele instala o que faltar (Python e, se preciso, Docker), é retomável depois de reinício e nunca promete instalação sem problemas.
 - Sem promessa de renda, sem escassez falsa, sem depoimentos inventados em qualquer texto de venda.
 - O kit só afirma o que foi testado. Se não foi testado em um sistema ou ferramenta, não entra no material.
 - Não copie texto, imagens, nome ou logo do produto do mentor.
 
 ## Decisões em aberto (pare e pergunte)
 
-Não decida sozinho: Docker como caminho principal ou binário do motor, texto da licença da camada paga, nome do produto, parcelamento no Kiwify, pesos padrão das regras de nota, e qualquer mudança nas 12 perguntas.
+Não decida sozinho: motor como programa direto ou em Docker como caminho principal (a fase 0 verifica e o Silvestre decide com o resultado), texto da licença da camada paga, nome do produto, parcelamento no Kiwify, pesos padrão das regras de nota, e qualquer mudança nas 12 perguntas.
 
 ## Dados e privacidade durante o desenvolvimento
 

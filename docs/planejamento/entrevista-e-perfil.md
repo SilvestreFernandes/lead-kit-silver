@@ -8,7 +8,7 @@ A entrevista faz o Lead Kit Silver servir a qualquer negócio que venda para emp
 
 A entrevista roda na IA do usuário (Claude Code ou Codex). O painel nunca chama IA.
 
-1. **Pré-checagem:** a IA detecta o sistema, confere Python e o motor (e Docker, se for o caminho escolhido), lista o que vai instalar e pede confirmação.
+1. **Pré-checagem:** a IA detecta o sistema, confere Python e Docker, lista o que vai instalar e pede confirmação.
 2. **Instalação:** instala o que faltar e liga o motor local na versão fixada, acessível só pelo próprio computador. Se precisar de reinício ou de outra ação do cliente, pausa e retoma depois (ver `arquitetura.md`).
 3. **Entrevista:** 12 perguntas, uma por vez, em português.
 4. **Perfil:** a IA grava o arquivo `perfil.json` e escreve os modelos de mensagem.
@@ -126,7 +126,7 @@ Como funciona:
 - A nota final vira A, B ou C pelos cortes do perfil. Cada lead mostra os motivos em linguagem simples, por exemplo "sem site (+3)".
 - O telefone com 9 dígitos é uma estimativa. O painel diz "provavelmente WhatsApp", nunca confirma.
 - Instagram só é detectado quando o site do negócio aponta pra ele. O kit não promete achar o perfil de todo mundo.
-- Os nomes exatos das colunas do CSV do motor devem ser conferidos com um CSV real na implementação.
+- Os nomes das colunas foram conferidos na fase 0 com um CSV real (ver `fase0-verificacao-motor.md`). `order_online` e `reservations` chegam como JSON, então a regra olha se o valor não é vazio ou `[]`. `emails` só vem preenchido quando a busca usa a opção de e-mail; sem ela, a regra `sem_email` marcaria todo lead, então só vale em buscas feitas com e-mail ligado.
 
 ## Modelos de mensagem
 
@@ -215,7 +215,7 @@ Decisões que ainda dependem do Silvestre ou de teste. A IA que implementa deve 
 
 - Perguntas: alguma está sobrando ou faltando pro público? A 12 e a 7 são as mais fáceis de cortar.
 - Pesos padrão das regras: ajustar depois de testar com leads reais.
-- Docker como caminho principal ou binário do motor, depois de testar a instalação no Windows.
+- Motor como programa direto, sem Docker: pesquisa futura, fora da v1. A decisão de usar Docker foi tomada em 2026-10-29.
 - Se o prompt funciona igual no Codex e no Claude Code, ou se precisa de uma versão por ferramenta.
 - Parcelamento do Kiwify: conferir se os 12x de R$ 97 saem sem juros pro cliente (menos de R$ 10 por mês).
 - Disponibilidade do nome Lead Kit Silver (registro.br, Instagram e TikTok).

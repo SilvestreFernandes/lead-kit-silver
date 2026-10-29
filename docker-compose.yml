@@ -1,0 +1,22 @@
+# Motor de busca do Lead Kit Silver: gosom/google-maps-scraper (MIT), sem alteração.
+# Sobe a API em http://127.0.0.1:8080.
+# A imagem não tem login, então a porta fica presa a 127.0.0.1. Essa regra é a proteção.
+# Nunca troque o mapeamento por 0.0.0.0 nem por outra interface.
+# Estrutura inspirada no kit base de Mahan (MIT). Créditos em CREDITS.md.
+
+services:
+  motor:
+    # Versão fixada. Só muda depois de passar nos três perfis de teste.
+    image: gosom/google-maps-scraper:v1.18.1
+    container_name: lead-kit-motor
+    restart: unless-stopped
+    command: ["-web", "-data-folder", "/dados-motor"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - motor_dados:/dados-motor
+      - motor_cache:/opt
+
+volumes:
+  motor_dados:
+  motor_cache:

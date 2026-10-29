@@ -16,7 +16,7 @@ Princípios que valem pra todas as decisões abaixo:
 
 1. **Tudo roda no computador da pessoa.** Nenhum lead sai da máquina. O kit não tem servidor nosso, conta, login nem custo recorrente.
 2. **IA só na instalação e na entrevista.** Depois disso o painel funciona sem chamar IA. Nota e mensagem saem de regras e modelos salvos, sempre com o mesmo resultado.
-3. **Poucas dependências, e a instalação cuida delas.** Python 3.10+ com biblioteca padrão, painel em HTML e JavaScript puros, sem build e sem npm. O que faltar no computador (Python e, se for preciso, Docker) o prompt instala, depois de listar e pedir confirmação.
+3. **Poucas dependências, e a instalação cuida delas.** Python 3.10+ com biblioteca padrão, painel em HTML e JavaScript puros, sem build e sem npm. O que faltar no computador (Python e Docker) o prompt instala, depois de listar e pedir confirmação.
 4. **Honestidade primeiro.** O kit diz o que raspa, o risco com os termos do Google, a LGPD e o limite do WhatsApp. Só prometemos o que foi testado.
 5. **Crédito e licença intactos.** O motor `gosom/google-maps-scraper` (MIT) roda sem alteração, com versão fixada, e o `CREDITS.md` e o `LICENSE` ficam no kit.
 6. **Funciona em qualquer sistema, com Windows como o testado.** Todo comando tem caminho pra Windows, macOS e Linux, mas o material de venda só cita o que o Silvestre testou.
@@ -30,7 +30,7 @@ lead-kit-silver/
   README.md                 visão rápida e como começar
   LICENSE                   MIT do kit original
   CREDITS.md                créditos do motor e do kit base (obrigatório)
-  docker-compose.yml        caminho de reserva: motor em Docker, só em 127.0.0.1
+  docker-compose.yml        motor em Docker, só em 127.0.0.1 (caminho principal da v1)
   iniciar.bat               sobe motor e painel com um clique (Windows)
   iniciar.sh                o mesmo no macOS e Linux
   AGENTS.md                 regras para Codex e outras IAs
@@ -67,7 +67,7 @@ lead-kit-silver/
     leads.db
     instalacao.json         progresso da instalação (pausar e retomar)
     exportacoes/
-  ferramentas/              motor e Python portátil, se usados; baixados na instalação, no .gitignore
+  ferramentas/              Python portátil, se usado; baixado na instalação, no .gitignore
 ```
 
 Regras da estrutura:
@@ -93,7 +93,7 @@ A IA do comprador só escreve o perfil, na instalação. Depois disso o painel f
 
 | Peça | Tecnologia | Por quê |
 | --- | --- | --- |
-| Motor | `gosom/google-maps-scraper` v1.18.1, como programa direto se a fase 0 confirmar, ou em Docker | Já faz a busca, licença MIT, versão fixada |
+| Motor | `gosom/google-maps-scraper` v1.18.1, em Docker (imagem oficial) | Já faz a busca, licença MIT, versão fixada |
 | Servidor local | Python 3.10+ só com a biblioteca padrão (Python portátil se o computador não tiver) | Nada de pacote pra instalar, e o kit base já usa Python |
 | Painel | HTML, CSS e JavaScript puros | Sem build, abre em qualquer navegador |
 | Banco | SQLite em `dados/leads.db` | Um arquivo só, já vem com o Python |
@@ -105,9 +105,9 @@ A IA do comprador só escreve o perfil, na instalação. Depois disso o painel f
 O comprador abre a IA dele numa pasta vazia e cola o prompt de instalação. O prompt é curto e só orquestra: os arquivos do kit já vêm prontos e testados, a IA não escreve o código do zero. Isso deixa a instalação repetível e fácil de testar.
 
 1. **Apresentação e consentimento.** A IA explica o que o kit faz, lista tudo o que vai instalar ou baixar e pede um "pode seguir" antes de cada passo que muda o computador.
-2. **Pré-checagem e instalação do que falta.** Sistema, Python, motor, Docker (só se for o caminho escolhido) e portas livres (tabela abaixo). O que faltar, a IA instala depois de listar e pedir o "pode seguir". Nada é instalado às escondidas.
+2. **Pré-checagem e instalação do que falta.** Sistema, Python, motor, Docker e portas livres (tabela abaixo). O que faltar, a IA instala depois de listar e pedir o "pode seguir". Nada é instalado às escondidas.
 3. **Arquivos do kit.** A pessoa baixa o `.zip` pela área de membros da Kiwify e extrai na pasta. A IA confere se `LICENSE`, `CREDITS.md` e `kit/` estão lá.
-4. **Motor.** Se o programa do motor roda direto na máquina, baixa a versão fixada e confere o checksum. Senão, usa o Docker (`docker compose up -d`). Nos dois casos termina com uma checagem em `http://127.0.0.1:8080/api/v1/jobs`.
+4. **Motor.** Sobe o motor em Docker com `docker compose up -d`, na imagem de versão fixada. Termina com uma checagem em `http://127.0.0.1:8080/api/v1/jobs`. O download da imagem é o maior da instalação e entra na lista de confirmação.
 5. **Entrevista.** As 12 perguntas, o resumo e o "confirmo", gerando `dados/perfil.json` (ver `entrevista-e-perfil.md`).
 6. **Validação.** `python kit/validar_perfil.py`. Se falhar, a IA refaz só a pergunta com problema.
 7. **Teste de ponta a ponta.** Uma busca pequena (uma categoria, uma cidade, poucos resultados) pra provar que motor, nota e mensagem funcionam no computador dessa pessoa.
@@ -120,8 +120,7 @@ Pré-checagem do passo 2:
 | --- | --- | --- |
 | Sistema | `platform.system()` no Python | Escolhe os comandos de Windows, macOS ou Linux |
 | Python 3.10 ou mais novo | `python --version`, ou `py -3 --version` no Windows | Instala pelo `winget` (Windows), Homebrew (macOS) ou gerenciador do sistema (Linux), ou usa o Python portátil da pasta `ferramentas/` |
-| Motor como programa | Baixa a versão fixada e roda uma busca de teste | Se falhar, cai pro caminho com Docker |
-| Docker rodando (só no caminho com Docker) | `docker info` | Instala o Docker Desktop pelo `winget`, avisa que vai pedir permissão e reinício, e usa o pausar e retomar |
+| Docker rodando | `docker info` | Instala o Docker Desktop pelo `winget`, avisa que vai pedir permissão e reinício, e usa o pausar e retomar |
 | Portas 8080 e 8787 livres | Tenta abrir a porta | Pergunta se pode usar outra porta e grava no perfil |
 | Internet | Acessa a imagem do motor e o Nominatim | Explica que a busca precisa de conexão |
 | Pasta com permissão de escrita | Cria e apaga um arquivo de teste | Pede pra escolher outra pasta |
@@ -138,7 +137,7 @@ Pausar e retomar. Alguns passos nenhum prompt faz sozinho: aceitar a janela de p
 - A cada passo concluído, a IA grava o progresso em `dados/instalacao.json`.
 - Quando precisa de uma ação do cliente, para com uma mensagem curta, por exemplo: "Reinicie o computador, abra a IA nesta mesma pasta e cole o prompt de novo. Eu continuo de onde parei."
 - Ao colar o prompt de novo, a IA lê esse arquivo, confere o que já está pronto e segue do próximo passo, sem refazer a entrevista.
-- Se a virtualização estiver desligada na BIOS, a IA explica em linguagem simples como ligar e avisa que depende do modelo do computador. É o caso que mais pode travar, e é mais um motivo pra preferir o motor como programa direto.
+- Se a virtualização estiver desligada na BIOS, a IA explica em linguagem simples como ligar e avisa que depende do modelo do computador. É o caso que mais pode travar na instalação.
 
 ## API do servidor local
 
@@ -164,7 +163,7 @@ Armazenamento em `dados/leads.db` (SQLite):
 
 - **buscas:** id, data, parâmetros, status, id do job no motor.
 - **leads:** dados do Maps, nota, letra, motivos, status (novo, contatado, respondeu, fechado, descartado), anotação, mensagem editada.
-- **Duplicados:** o mesmo negócio em buscas diferentes vira um lead só. A chave é o identificador do Maps se o CSV trouxer um, senão o nome mais o endereço normalizados. Os nomes exatos das colunas do CSV são conferidos na implementação, com um CSV real.
+- **Duplicados:** o mesmo negócio em buscas diferentes vira um lead só. A chave é o identificador do Maps se o CSV trouxer um, senão o nome mais o endereço normalizados. Colunas conferidas na fase 0 com um CSV real (36 colunas, lista em `fase0-verificacao-motor.md`). `place_id` e `cid` vieram preenchidos em todas as linhas e servem de chave contra duplicados. `order_online` e `reservations` chegam como JSON, não como texto simples. `emails` só vem preenchido quando o job usa a opção de e-mail (`email: true`), e isso deixa a busca mais lenta. Na API do motor o campo `lang` usa código de duas letras (`pt`), e `pt-BR` é recusado.
 - A exportação da v1 é CSV em UTF-8 com BOM, pra abrir certo no Excel. Planilha `.xlsx` fica pra depois, porque exigiria uma biblioteca.
 
 Segurança do servidor local, porque uma página qualquer da internet pode tentar falar com `127.0.0.1`:
@@ -226,14 +225,14 @@ Regras fixas pro Claude Code durante toda a construção:
 
 | Fase | Entrega | Pronto quando |
 | --- | --- | --- |
-| 0. Base | Repositório, `LICENSE`, `CREDITS.md`, estudo do que reaproveitar do kit base e a verificação do motor: existe programa pronto pra Windows, macOS e Linux na versão fixada, e rodando direto ele devolve um CSV? Também o `docker-compose.yml` como caminho de reserva | O motor sobe no Windows do Silvestre pelo caminho escolhido (programa direto ou Docker), um job manual devolve um CSV, e o resultado da verificação fica registrado em `docs/planejamento/` |
+| 0. Base | Repositório, `LICENSE`, `CREDITS.md`, estudo do que reaproveitar do kit base e a verificação do motor em Docker, com o `docker-compose.yml` | O motor sobe no Windows do Silvestre em Docker, um job manual pela API devolve um CSV, e o resultado fica registrado em `docs/planejamento/fase0-verificacao-motor.md` |
 | 1. Núcleo sem interface | `motor.py`, `geocodificar.py`, `banco.py`, limpeza do CSV, `pontuacao.py`, `regras.json`, `validar_perfil.py`, `esquema.json` | Um comando de terminal faz uma busca real e lista leads com nota e motivos, e os testes passam |
 | 2. Servidor | `servidor.py` com todas as rotas e a segurança local (Host, token, sem CORS) | Testes das rotas passam e uma busca roda pela API do começo ao fim |
 | 3. Painel | As três telas a partir do preview aprovado, com os estados de erro | Uma busca real, feita só pelo navegador, termina com leads e mensagens na tela |
 | 4. Entrevista e instalação | `perguntas.md`, `CLAUDE.md`, `AGENTS.md`, skill, `modelos.py`, prompt de instalação com instalação automática do que falta e pausar e retomar | Instalação do zero numa pasta limpa, no Windows, com o Claude Code, sem ajuda manual, inclusive num computador sem Python nem Docker |
 | 5. Pacote e testes de perfil | `.zip`, `iniciar.bat` e `iniciar.sh`, guias, os três perfis de teste, teste no Codex | Todos os critérios de aprovação do documento da entrevista cumpridos |
 
-Depois da fase 5, fora do escopo da v1: refino do design do painel, caminho sem Docker, exportação `.xlsx` e uma segunda versão do kit.
+Depois da fase 5, fora do escopo da v1: refino do design do painel, motor como programa direto (sem Docker, ver `fase0-verificacao-motor.md`), exportação `.xlsx` e uma segunda versão do kit.
 
 ## Testes e critérios de pronto
 
@@ -259,7 +258,7 @@ Critérios de pronto da v1:
 | Tema | Risco ou dúvida | Proposta |
 | --- | --- | --- |
 | Entrega do código | A IA escrever tudo do zero seria frágil. Pacote pronto mais prompt é testável | Pacote `.zip` pronto e prompt que só orquestra (como está neste documento) |
-| Docker | Exige WSL2, virtualização, permissão de administrador e reinício no Windows, e afasta iniciantes | Preferir o motor como programa direto, se a fase 0 confirmar. Docker fica de reserva, com instalação guiada |
+| Docker | Exige WSL2, virtualização, permissão de administrador e reinício no Windows, e afasta iniciantes | Decidido em 2026-10-29: Docker é o caminho principal da v1, com instalação guiada. O programa direto falhou no Windows na fase 0 e vira pesquisa futura |
 | Instalação automática | `winget`, permissões e BIOS podem falhar em alguns computadores | Pausar e retomar, mensagens claras e teste numa máquina sem Python nem Docker. Nunca prometer instalação sem nenhum problema |
 | Termos do Google | Raspar o Maps viola os termos de uso do Google | Dizer isso claramente no guia e na página de venda |
 | LGPD | Telefone e e-mail são dados pessoais | Guia de abordagem responsável e aviso fixo no painel |

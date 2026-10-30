@@ -12,8 +12,10 @@ Dono: Silvestre Fernandes Silva (Brasília), estudante de Bacharelado em Intelig
 
 1. `docs/planejamento/arquitetura.md`: estrutura, componentes, API, painel, fases e critérios de pronto.
 2. `docs/planejamento/entrevista-e-perfil.md`: as 12 perguntas, o formato do `perfil.json`, regras de nota, modelos de mensagem e validação.
+3. `docs/planejamento/fase0-verificacao-motor.md`: o que foi verificado do motor na fase 0 (versão, execução, colunas, API).
+4. `docs/planejamento/licoes-instalacao.md`: lições do teste em máquina limpa, que alimentam o prompt de instalação e o guia do cliente.
 
-Esses dois documentos são a especificação. Em caso de dúvida, eles mandam. Se algo neles estiver errado ou faltando, pare e pergunte antes de decidir.
+Os dois primeiros documentos são a especificação. Em caso de dúvida, eles mandam. Se algo neles estiver errado ou faltando, pare e pergunte antes de decidir.
 
 ## Como trabalhar
 
@@ -36,10 +38,19 @@ Esses dois documentos são a especificação. Em caso de dúvida, eles mandam. S
 - Sem promessa de renda, sem escassez falsa, sem depoimentos inventados em qualquer texto de venda.
 - O kit só afirma o que foi testado. Se não foi testado em um sistema ou ferramenta, não entra no material.
 - Não copie texto, imagens, nome ou logo do produto do mentor.
+- Nunca faça commit de CSV nem de dados de leads reais. Testes usam só dados fictícios.
+
+## Decisões já tomadas
+
+- Motor: o Docker é o caminho principal. Rodar o motor como programa direto, sem Docker, é pesquisa futura e fica fora da v1.
 
 ## Decisões em aberto (pare e pergunte)
 
-Não decida sozinho: motor como programa direto ou em Docker como caminho principal (a fase 0 verifica e o Silvestre decide com o resultado), texto da licença da camada paga, nome do produto, parcelamento no Kiwify, pesos padrão das regras de nota, e qualquer mudança nas 12 perguntas.
+Não decida sozinho: texto da licença da camada paga, nome do produto, parcelamento no Kiwify, pesos padrão das regras de nota, e qualquer mudança nas 12 perguntas.
+
+## Estado do projeto
+
+A fase 0 (verificação do motor em Docker) está concluída. A próxima é a fase 1.
 
 ## Dados e privacidade durante o desenvolvimento
 

@@ -34,6 +34,22 @@ Corpo do `POST /api/v1/jobs` que funcionou:
 - O status do job é `working` e depois `ok`. Os outros valores de status (falha, cancelado) ainda não foram observados.
 - Sem `email: true` o campo `emails` do CSV vem vazio.
 
+## Medição de profundidade (fase 1, 2026-10-30)
+
+Mesma busca nas três linhas (`padaria em Sobradinho DF`, `lat -15.65`, `lon -47.79`, `radius` 10000, `zoom` 15, `email` falso), uma de cada vez, na mesma máquina. Os CSVs da medição foram apagados.
+
+| `depth` | `max_time` enviado | Linhas | `place_id` únicos | Tempo até `ok` |
+| --- | --- | --- | --- | --- |
+| 1 (fase 0) | 180 s | 16 | 16 | cerca de 30 s |
+| 3 | 900 s | 20 | 20 | 50 s |
+| 5 | 900 s | 20 | 20 | 50 s |
+
+Conclusões:
+
+- Com `depth` 3 e 5 saíram os mesmos 20 negócios (interseção de 20 em 20), no mesmo tempo. Nesta busca, passar de `depth` 3 não trouxe nada novo. Não se sabe se o motor para em cerca de 20 resultados por palavra-chave e raio, ou se Sobradinho simplesmente tem poucas padarias nesse raio. Isso não foi separado.
+- Por isso a profundidade sozinha não serve para diferenciar busca rápida, média e ampla. Mais resultados provavelmente pedem outra alavanca (várias palavras-chave, ou várias coordenadas em grade, como o kit de referência faz), e isso ainda não foi testado.
+- Os tempos acima valem para uma busca de uma palavra-chave. O `max_time` de 900 s foi folga de medição, não valor recomendado: nenhuma busca chegou perto.
+
 ## Colunas reais do CSV (36)
 
 `input_id, link, title, category, address, open_hours, popular_times, website, phone, plus_code, review_count, review_rating, reviews_per_rating, latitude, longitude, cid, status, descriptions, reviews_link, thumbnail, timezone, price_range, data_id, street_view_url, place_id, images, reservations, order_online, menu, owner, complete_address, credit_cards_accepted, about, user_reviews, user_reviews_extended, emails`

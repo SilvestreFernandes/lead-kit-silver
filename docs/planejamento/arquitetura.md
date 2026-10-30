@@ -42,8 +42,10 @@ lead-kit-silver/
     perfil.exemplo.json     exemplo preenchido
   kit/
     servidor.py             servidor local e rotas da API
+    buscar.py               comando de terminal: faz uma busca e lista leads com nota
     motor.py                cliente do motor (jobs, status, download)
     geocodificar.py         cidade para latitude e longitude (Nominatim)
+    limpeza.py              lê o CSV do motor, limpa os campos e tira duplicados
     pontuacao.py            regras e nota A, B, C
     regras.json             tabela de regras e pesos padrão
     modelos.py              troca dos marcadores nas mensagens
@@ -54,7 +56,13 @@ lead-kit-silver/
       app.js
       estilo.css
   testes/
+    fixtures.py             leads e perfil fictícios, em Python (o .gitignore bloqueia CSV)
     perfis/                 três perfis de teste
+    test_banco.py
+    test_buscar.py
+    test_geocodificar.py
+    test_limpeza.py
+    test_motor.py
     test_pontuacao.py
     test_validacao.py
     test_servidor.py

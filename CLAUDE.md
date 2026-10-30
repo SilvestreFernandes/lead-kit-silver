@@ -50,7 +50,7 @@ Não decida sozinho: texto da licença da camada paga, nome do produto, parcelam
 
 ## Estado do projeto
 
-A fase 0 (verificação do motor em Docker) está concluída. A próxima é a fase 1.
+As fases 0 (verificação do motor em Docker) e 1 (núcleo sem interface) estão concluídas. A próxima é a fase 2 (servidor). Os tamanhos de busca média e ampla em `kit/motor.py` são provisórios até a decisão sobre a alavanca (profundidade sozinha não diferenciou).
 
 ## Dados e privacidade durante o desenvolvimento
 

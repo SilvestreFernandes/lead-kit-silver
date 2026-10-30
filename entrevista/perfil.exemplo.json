@@ -1,0 +1,37 @@
+{
+  "versao": 1,
+  "criado_em": "2026-10-30",
+  "negocio": {
+    "nome": "Exemplo",
+    "empresa": "Empresa Exemplo",
+    "oferta": "Sites e automações com IA para negócios locais",
+    "atendimento": "remoto"
+  },
+  "cliente": {
+    "tipos": ["padaria", "academia", "restaurante"],
+    "porte": "pequeno",
+    "regioes": ["Sobradinho-DF"],
+    "exemplo": ""
+  },
+  "pontuacao": {
+    "regras": [
+      {"id": "sem_site", "peso": 3},
+      {"id": "so_instagram", "peso": 2},
+      {"id": "nota_alta", "peso": 2},
+      {"id": "muitas_avaliacoes", "peso": 1},
+      {"id": "celular", "peso": 2}
+    ]
+  },
+  "exclusoes": ["franquia", "sem_telefone"],
+  "exclusoes_concorrentes": [],
+  "abordagem": {
+    "canais": ["whatsapp"],
+    "tom": "amigavel",
+    "oferta_entrada": "diagnóstico grátis",
+    "volume_semana": "10-30"
+  },
+  "conformidade": {"restricoes": "nao"},
+  "mensagens": {
+    "whatsapp": "Oi, tudo bem? Aqui é o {meu_nome}, da {minha_empresa}. Vi a {nome}, em {cidade}, e notei que {motivo}. Faço um diagnóstico grátis com ideias pra isso. Posso te mandar? Se não fizer sentido, é só avisar que não escrevo mais."
+  }
+}

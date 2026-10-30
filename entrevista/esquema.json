@@ -1,0 +1,13 @@
+{
+  "versao_atual": 1,
+  "obrigatorios": ["negocio.oferta", "cliente.tipos", "cliente.regioes", "abordagem.canais", "abordagem.tom"],
+  "portes": ["pequeno", "medio", "grande", "qualquer"],
+  "atendimentos": ["presencial", "remoto", "ambos"],
+  "canais": ["whatsapp", "email", "ligacao", "visita"],
+  "tons": ["amigavel", "direto", "formal"],
+  "peso_minimo": 0,
+  "peso_maximo": 5,
+  "marcadores": ["nome", "cidade", "categoria", "motivo", "meu_nome", "minha_empresa"],
+  "campos_sensiveis": ["cpf", "senha", "password", "saude", "rg", "cartao"],
+  "opcionais": {"exclusoes_concorrentes": [], "exclusoes_categorias": []}
+}

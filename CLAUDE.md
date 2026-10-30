@@ -34,7 +34,7 @@ Os dois primeiros documentos são a especificação. Em caso de dúvida, eles ma
 - O painel nunca chama IA. IA só entra na instalação e na entrevista. Nota e mensagem saem de regras e modelos salvos.
 - O servidor local valida `Host`, exige token nas rotas que alteram dados e não libera CORS.
 - Nenhum dado de lead sai do computador da pessoa. Sem telemetria.
-- O prompt de instalação nunca manda desligar antivírus, firewall ou permissões de segurança da ferramenta de IA, e pede confirmação antes de cada passo que muda o computador. Ele instala o que faltar (Python e, se preciso, Docker), é retomável depois de reinício e nunca promete instalação sem problemas.
+- O prompt de instalação nunca manda desligar antivírus, firewall ou permissões de segurança da ferramenta de IA, e pede confirmação antes de cada passo que muda o computador. Ele instala o que faltar (Python e Docker Desktop, que é obrigatório na v1), é retomável depois de reinício e nunca promete instalação sem problemas.
 - Sem promessa de renda, sem escassez falsa, sem depoimentos inventados em qualquer texto de venda.
 - O kit só afirma o que foi testado. Se não foi testado em um sistema ou ferramenta, não entra no material.
 - Não copie texto, imagens, nome ou logo do produto do mentor.

@@ -44,9 +44,20 @@ Mesma busca nas três linhas (`padaria em Sobradinho DF`, `lat -15.65`, `lon -47
 | 3 | 900 s | 20 | 20 | 50 s |
 | 5 | 900 s | 20 | 20 | 50 s |
 
+Segunda medição, em cidade grande (2026-10-30): `restaurantes em Brasília DF`, coordenadas do Nominatim (`-15.7939869`, `-47.8828`), `radius` 10000, `zoom` 15, `email` falso, uma de cada vez. Os dados da medição foram apagados.
+
+| `depth` | `max_time` enviado | Linhas | `place_id` únicos | Tempo até `ok` |
+| --- | --- | --- | --- | --- |
+| 1 | 180 s | 16 | 16 | 45 s |
+| 5 | 900 s | 20 | 20 | 50 s |
+
+Os 16 negócios do `depth` 1 estão todos entre os 20 do `depth` 5. O `depth` 5 trouxe 4 a mais.
+
 Conclusões:
 
-- Com `depth` 3 e 5 saíram os mesmos 20 negócios (interseção de 20 em 20), no mesmo tempo. Nesta busca, passar de `depth` 3 não trouxe nada novo. Não se sabe se o motor para em cerca de 20 resultados por palavra-chave e raio, ou se Sobradinho simplesmente tem poucas padarias nesse raio. Isso não foi separado.
+- Mesmo numa cidade grande, `depth` 5 deu 20 resultados, o mesmo teto visto em Sobradinho. A profundidade muda pouco (de 16 para 20, 4 negócios a mais) e o ganho para em cerca de 20 por palavra-chave e por ponto. Nas três buscas com `depth` 3 ou 5, o total foi sempre 20. Isso sugere um teto do motor ou do Google Maps por busca, mas não foi provado.
+- Com isso, `depth` não serve para separar média de ampla. Os tamanhos média e ampla continuam **provisórios** em `kit/motor.py` e não foram fixados. Para passar de 20 resultados falta testar outra alavanca (várias palavras-chave ou uma grade de coordenadas).
+- Com `depth` 3 e 5 em Sobradinho saíram os mesmos 20 negócios (interseção de 20 em 20), no mesmo tempo. Nesta busca, passar de `depth` 3 não trouxe nada novo. Não se sabe se o motor para em cerca de 20 resultados por palavra-chave e raio, ou se Sobradinho simplesmente tem poucas padarias nesse raio. Isso não foi separado.
 - Por isso a profundidade sozinha não serve para diferenciar busca rápida, média e ampla. Mais resultados provavelmente pedem outra alavanca (várias palavras-chave, ou várias coordenadas em grade, como o kit de referência faz), e isso ainda não foi testado.
 - Os tempos acima valem para uma busca de uma palavra-chave. O `max_time` de 900 s foi folga de medição, não valor recomendado: nenhuma busca chegou perto.
 

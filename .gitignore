@@ -3,3 +3,4 @@ ferramentas/
 __pycache__/
 *.pyc
 .env
+*.csv

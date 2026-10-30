@@ -56,11 +56,15 @@ lead-kit-silver/
     validar_perfil.py       valida o perfil.json
     banco.py                SQLite dos leads e do status
     painel/
-      index.html
-      estilo.css
-      api.js                fala com o servidor (token, erros, respostas antigas)
-      util.js               funções puras: formatação, filtros, links
-      app.js                casca, abas, estado do motor e do perfil
+      index.html            casca da página (o servidor escreve o token aqui)
+      estilo.css            tokens de cor, tema claro e escuro, componentes
+      favicon.svg
+      tema.js               aplica o tema salvo antes de a página aparecer
+      api.js                fala com o servidor (token, erros, só a última resposta vale)
+      util.js               funções puras: query, abas, tema, tipos de falha
+      dom.js                monta elementos sem innerHTML; avisos, comandos, botões
+      app.js                casca: abas, estado do motor e do perfil, avisos, troca de tela
+      tela-perfil.js        perfil ausente ou com problemas
       tela-buscar.js
       tela-leads.js
       tela-oferta.js
@@ -77,7 +81,10 @@ lead-kit-silver/
     test_motor.py
     test_pontuacao.py
     test_validacao.py
-    test_painel.py          confere o painel por texto: rotas usadas, nada de innerHTML, sem URL externa
+    test_painel.py          confere o painel por texto: rotas usadas, nada de innerHTML, sem URL externa, sem travessão
+    test_painel_js.py       roda js/util.test.mjs com o Node, se ele existir (só ferramenta de desenvolvimento)
+    js/util.test.mjs        testes de util.js e api.js
+    demo_painel.py          servidor de demonstração com dados fictícios, um modo por estado do painel
     test_servidor.py
     test_xlsx.py
     test_testar_api.py

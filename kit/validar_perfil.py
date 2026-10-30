@@ -57,7 +57,8 @@ def validar(perfil):
 
     for caminho in ESQUEMA["obrigatorios"]:
         if _pegar(perfil, caminho) in (None, "", []):
-            erros.append(f"Falta preencher: {caminho}.")
+            rotulo = ESQUEMA.get("rotulos", {}).get(caminho)
+            erros.append(f"Falta preencher: {rotulo} ({caminho})." if rotulo else f"Falta preencher: {caminho}.")
 
     if _pegar(perfil, "cliente.porte") not in (None, "", *ESQUEMA["portes"]):
         erros.append("O porte do cliente precisa ser: " + ", ".join(ESQUEMA["portes"]) + ".")

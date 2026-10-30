@@ -12,7 +12,6 @@ Uso:  python kit/servidor.py
 import argparse
 import hmac
 import json
-import mimetypes
 import os
 import re
 import secrets
@@ -38,7 +37,13 @@ LIMITE_CORPO = 1_000_000
 LIMITE_DRENAGEM = 8_000_000  # acima disso nem tenta ler: so responde e fecha
 UFS = ("AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR",
        "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO")
-EXTENSOES_ESTATICAS = {".html", ".js", ".css", ".svg", ".png", ".ico", ".txt"}
+# Tipo fixo por extensao: modulos JavaScript exigem text/javascript, e o Windows pode mapear .js
+# para outro tipo no registro do sistema.
+TIPOS_ESTATICOS = {
+    ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml",
+    ".png": "image/png", ".ico": "image/x-icon", ".txt": "text/plain",
+}
+EXTENSOES_ESTATICAS = set(TIPOS_ESTATICOS)
 CABECALHOS_SEGUROS = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
@@ -496,10 +501,10 @@ class Servidor(ThreadingHTTPServer):
         if not alvo.is_relative_to(base) or not alvo.is_file():
             raise Erro(404, "Não achei esse arquivo.")
         dados = alvo.read_bytes()
-        tipo = mimetypes.guess_type(alvo.name)[0] or "application/octet-stream"
+        tipo = TIPOS_ESTATICOS[alvo.suffix.lower()]
         if alvo.suffix.lower() == ".html":
             dados = dados.replace(b"{{TOKEN}}", self.token.encode("ascii"))
-        if tipo.startswith("text/") or tipo in ("application/javascript", "image/svg+xml"):
+        if tipo.startswith("text/") or tipo == "image/svg+xml":
             tipo += "; charset=utf-8"
         return Resposta(200, dados, tipo)
 

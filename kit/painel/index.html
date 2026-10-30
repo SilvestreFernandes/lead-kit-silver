@@ -3,10 +3,48 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <meta name="token" content="{{TOKEN}}">
 <title>Lead Kit Silver</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/estilo.css">
+<script src="/tema.js"></script>
 </head>
 <body>
-<p>Painel em construção (fase 3). O servidor local está no ar.</p>
+<a class="skip" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">LK</div>
+      <div><b>Lead Kit Silver</b><small>Prospecção local com IA</small></div>
+    </div>
+    <div class="top-acoes">
+      <div class="engine" id="motor" data-estado="verificando" role="status" title="O motor de busca roda só no seu computador">
+        <span class="dot" aria-hidden="true"></span><span id="motor-texto">Verificando o motor</span>
+      </div>
+      <button class="icon-btn" id="tema" type="button" aria-label="Trocar entre tema claro e escuro" title="Tema claro ou escuro">&#9680;</button>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Seções">
+    <div class="wrap" role="tablist" id="abas">
+      <button class="tab" role="tab" id="aba-buscar" data-aba="buscar" aria-controls="conteudo" aria-selected="false" tabindex="-1">Buscar</button>
+      <button class="tab" role="tab" id="aba-leads" data-aba="leads" aria-controls="conteudo" aria-selected="false" tabindex="-1">Leads <span class="count" id="aba-leads-contagem" hidden></span></button>
+      <button class="tab" role="tab" id="aba-oferta" data-aba="oferta" aria-controls="conteudo" aria-selected="false" tabindex="-1">Minha oferta</button>
+    </div>
+  </nav>
+</header>
+
+<div id="avisos"></div>
+
+<main id="conteudo" tabindex="-1">
+  <div class="wrap" id="tela" role="tabpanel">
+    <noscript><div class="card sem-js">O painel precisa de JavaScript ligado no navegador para funcionar.</div></noscript>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script type="module" src="/app.js"></script>
 </body>
 </html>

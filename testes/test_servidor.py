@@ -13,7 +13,7 @@ from pathlib import Path
 
 from kit import banco, limpeza, servidor
 from kit import motor as motor_mod
-from testes.fixtures import (GeoDeMentira, MotorDeMentira, csv_texto, linha, perfil_ficticio)
+from testes.fixtures import (GeoDeMentira, MotorDeMentira, csv_texto, leads_em_massa, linha, perfil_ficticio)
 
 TOKEN = "token-de-teste-123"
 
@@ -642,7 +642,7 @@ class TestBuscas(Base):
 
 class TestExportar(Base):
     def baixar(self, consulta=""):
-        return self.ler("/api/exportar" + consulta)
+        return self.ler("/api/exportar" + consulta, token=TOKEN)
 
     def linhas(self, r):
         return list(csv.reader(io.StringIO(r.texto.lstrip("﻿"))))
@@ -740,7 +740,7 @@ class TestEstatico(Base):
 
 class TestExportarXlsx(Base):
     def baixar(self, consulta=""):
-        return self.ler("/api/exportar?formato=xlsx" + consulta)
+        return self.ler("/api/exportar?formato=xlsx" + consulta, token=TOKEN)
 
     def test_devolve_um_xlsx_de_verdade(self):
         r = self.baixar()
@@ -765,14 +765,42 @@ class TestExportarXlsx(Base):
         self.assertEqual(linhas("&excluidos=todos"), 11)
 
     def test_formato_invalido_filtro_invalido_e_sem_perfil(self):
-        self.assertEqual(self.ler("/api/exportar?formato=pdf").status, 400)
+        self.assertEqual(self.ler("/api/exportar?formato=pdf", token=TOKEN).status, 400)
         self.assertEqual(self.baixar("&letra=Z").status, 400)
         (self.dados / "perfil.json").unlink()
         self.assertEqual(self.baixar().status, 409)
 
     def test_csv_continua_sendo_o_padrao(self):
-        self.assertTrue(self.ler("/api/exportar").cabecalho("Content-Type").startswith("text/csv"))
-        self.assertTrue(self.ler("/api/exportar?formato=csv").cabecalho("Content-Type").startswith("text/csv"))
+        self.assertTrue(self.ler("/api/exportar", token=TOKEN).cabecalho("Content-Type").startswith("text/csv"))
+        self.assertTrue(self.ler("/api/exportar?formato=csv", token=TOKEN).cabecalho("Content-Type").startswith("text/csv"))
+
+
+class TestExportarExigeToken(Base):
+    """A exportacao entrega os dados dos leads em arquivo, entao leva o token como as escritas."""
+
+    def test_sem_token_ou_com_token_errado_e_recusada(self):
+        for formato in ("csv", "xlsx"):
+            for token in (None, "", "errado", TOKEN + "x"):
+                with self.subTest(formato=formato, token=token):
+                    r = self.ler(f"/api/exportar?formato={formato}", token=token)
+                    self.assertEqual(r.status, 401)
+                    self.assertNotIn("Pão Sem Site".encode("utf-8"), r.corpo)  # nenhum dado vaza na recusa
+                    self.assertEqual(r.json["erro"], "Falta a permissão para alterar dados. Recarregue o painel.")
+
+    def test_com_token_certo_baixa(self):
+        self.assertEqual(self.ler("/api/exportar?formato=xlsx", token=TOKEN).status, 200)
+        self.assertEqual(self.ler("/api/exportar", token=TOKEN).status, 200)
+
+    def test_host_errado_vence_o_token(self):
+        self.assertEqual(self.ler("/api/exportar", token=TOKEN, host="evil.invalid").status, 403)
+
+    def test_origin_de_fora_vence_o_token(self):
+        r = self.ler("/api/exportar", token=TOKEN, cabecalhos={"Origin": "http://evil.invalid"})
+        self.assertEqual(r.status, 403)
+
+    def test_as_outras_leituras_continuam_sem_token(self):
+        for caminho in ("/api/estado", "/api/leads", "/api/perfil", "/api/opcoes", "/api/buscas"):
+            self.assertEqual(self.ler(caminho).status, 200, caminho)
 
 
 class TestOpcoes(Base):
@@ -840,6 +868,158 @@ class TestBuscaMediaPelaApi(Base):
         d = self.ler("/api/opcoes").json
         self.assertEqual(d["tamanhos_em_breve"], ["ampla"])
         self.assertEqual({t["id"]: t["pontos"] for t in d["tamanhos"]}, {"rapida": 1, "media": 5})
+
+
+class TestListaGrande(Base):
+    """650 leads FICTICIOS: o painel carrega por partes de 100 e nada se perde nem se repete."""
+    com_leads = False
+
+    def setUp(self):
+        super().setUp()
+        self.popular_banco(leads_em_massa(650))
+
+    def pagina(self, offset, limite=100, extra=""):
+        return self.ler(f"/api/leads?limite={limite}&offset={offset}&excluidos=todos{extra}").json
+
+    def test_650_leads_em_partes_de_100_sem_repetir_nem_perder(self):
+        ids, total = [], None
+        for offset in range(0, 700, 100):
+            d = self.pagina(offset)
+            total = d["total"]
+            ids += [l["id"] for l in d["leads"]]
+        self.assertEqual(total, 650)
+        self.assertEqual(len(ids), 650)
+        self.assertEqual(len(set(ids)), 650)
+
+    def test_a_ordem_das_partes_e_a_mesma_de_uma_chamada_so(self):
+        em_partes = [l["id"] for o in range(0, 700, 100) for l in self.pagina(o)["leads"]]
+        inteira = [l["id"] for l in self.pagina(0, limite=1000)["leads"]]
+        self.assertEqual(em_partes, inteira)
+
+    def test_a_mesma_parte_pedida_duas_vezes_e_igual(self):
+        self.assertEqual(self.pagina(200)["leads"], self.pagina(200)["leads"])
+
+    def test_melhores_primeiro_e_excluidos_no_fim(self):
+        leads = self.pagina(0, limite=1000)["leads"]
+        dentro = [l for l in leads if not l["excluido_por"]]
+        fora = [l for l in leads if l["excluido_por"]]
+        self.assertEqual(leads, dentro + fora)
+        notas = [l["nota"] for l in dentro]
+        self.assertEqual(notas, sorted(notas, reverse=True))
+        self.assertTrue(fora)  # ha excluidos (sem telefone e rede ficticia)
+
+    def test_padrao_nao_mostra_excluidos_e_a_contagem_bate(self):
+        d = self.ler("/api/leads?limite=1000").json
+        self.assertTrue(all(not l["excluido_por"] for l in d["leads"]))
+        self.assertEqual(sum(d["contagem_por_letra"].values()), d["total"])
+        todos = self.ler("/api/leads?limite=1000&excluidos=todos").json
+        self.assertGreater(todos["total"], d["total"])
+
+    def test_pedir_alem_do_fim_devolve_lista_vazia(self):
+        d = self.pagina(650)
+        self.assertEqual((d["total"], d["leads"]), (650, []))
+        self.assertEqual(self.pagina(5000)["leads"], [])
+
+    def test_rede_ficticia_e_marcada_nas_tres_unidades(self):
+        d = self.ler("/api/leads?limite=1000&excluidos=sim&q=rede%20ficticia").json
+        self.assertGreaterEqual(d["total"], 3)
+        self.assertTrue(all("possível rede" in l["excluido_por"] for l in d["leads"]))
+
+    def test_650_leads_respondem_em_tempo_razoavel(self):
+        import time as _t
+        inicio = _t.perf_counter()
+        for offset in (0, 100, 200):
+            self.pagina(offset)
+        self.assertLess(_t.perf_counter() - inicio, 5.0)  # folga grande: o objetivo e pegar um desastre
+
+
+class TestPorQueEWhatsapp(Base):
+    def test_resumo_traz_o_por_que_curto_e_nao_o_longo(self):
+        l = next(x for x in self.ler("/api/leads?limite=1000").json["leads"] if x["nome"] == "Pão Sem Site")
+        self.assertEqual(l["por_que_curto"][0], "sem site")
+        self.assertNotIn("por_que", l)
+        self.assertNotIn("whatsapp_numero", l)
+
+    def test_detalhe_traz_frases_simples_com_pontos(self):
+        d = self.ler(f"/api/leads/{self.lead_id('Pão Sem Site')}").json
+        textos = [i["texto"] for i in d["por_que"]]
+        self.assertIn("Não achei um site no perfil do Google Maps.", textos)
+        self.assertIn("A nota no Google Maps é 4,7.", textos)
+        self.assertIn("O perfil tem 80 avaliações no Google Maps.", textos)
+        self.assertEqual(next(i["pontos"] for i in d["por_que"] if i["rotulo"] == "sem site"), 3)
+        self.assertEqual(sum(i["pontos"] for i in d["por_que"]), d["nota"])
+        for t in textos:
+            self.assertTrue(t[0].isupper() and t.endswith("."), t)
+            self.assertNotIn("—", t)
+
+    def test_lead_sem_regra_batida_tem_lista_vazia(self):
+        d = self.ler(f"/api/leads/{self.lead_id('Nota Péssima')}").json
+        self.assertEqual(d["por_que"], [])
+
+    def test_whatsapp_numero_so_para_celular_e_so_digitos(self):
+        celular = self.ler(f"/api/leads/{self.lead_id('Pão Sem Site')}").json
+        self.assertEqual(celular["whatsapp_numero"], "5561999990001")
+        self.assertTrue(celular["whatsapp_numero"].isdigit())
+        fixo = self.ler(f"/api/leads/{self.lead_id('Só Rede Social')}").json
+        self.assertIsNone(fixo["whatsapp_numero"])
+
+    def test_whatsapp_numero_ignora_o_que_nao_e_digito(self):
+        self.popular_banco([linha(70, title="Telefone Sujo", phone='(61) 99999-0070"><script>', website="")])
+        d = self.ler(f"/api/leads/{self.lead_id('Telefone Sujo')}").json
+        if d["whatsapp_numero"] is not None:
+            self.assertRegex(d["whatsapp_numero"], r"^55\d{11}$")
+
+
+class TestFiltrosRapidosNaApi(Base):
+    com_leads = False
+
+    def setUp(self):
+        super().setUp()
+        p = perfil_ficticio()
+        p["exclusoes"] = []
+        self.gravar_perfil(p)
+        self.popular_banco(leads_em_massa(300))
+
+    def lista(self, consulta=""):
+        return self.ler("/api/leads?limite=1000&excluidos=todos" + consulta).json
+
+    def test_sem_site_so_traz_leads_sem_site_e_a_nota_explica_igual(self):
+        d = self.lista("&sem_site=1")
+        self.assertTrue(0 < d["total"] < 300)
+        for l in d["leads"]:
+            self.assertEqual(l["site"], "")
+            self.assertIn("sem site", l["por_que_curto"])  # a regra de nota concorda com o filtro
+
+    def test_com_celular_so_traz_celular_e_a_nota_explica_igual(self):
+        d = self.lista("&celular=1")
+        self.assertTrue(0 < d["total"] < 300)
+        for l in d["leads"]:
+            self.assertTrue(l["celular"])
+            self.assertIn("telefone provavelmente é WhatsApp", l["por_que_curto"])
+
+    def test_quem_fica_de_fora_do_filtro_nao_tem_a_regra(self):
+        todos = self.lista()["leads"]
+        com = {l["id"] for l in self.lista("&sem_site=1")["leads"]}
+        for l in todos:
+            self.assertEqual(l["id"] in com, "sem site" in l["por_que_curto"], l["nome"])
+
+    def test_combina_com_os_outros_filtros_e_com_a_contagem(self):
+        d = self.lista("&sem_site=1&celular=1&letra=A")
+        self.assertTrue(all(l["letra"] == "A" and l["site"] == "" and l["celular"] for l in d["leads"]))
+        so_filtros = self.lista("&sem_site=1&celular=1")
+        self.assertEqual(sum(so_filtros["contagem_por_letra"].values()), so_filtros["total"])
+        self.assertEqual(d["contagem_por_letra"], so_filtros["contagem_por_letra"])  # a letra nao zera as outras
+
+    def test_valor_invalido_da_400(self):
+        self.assertEqual(self.ler("/api/leads?sem_site=talvez").status, 400)
+        self.assertEqual(self.ler("/api/leads?celular=7").status, 400)
+
+    def test_a_exportacao_respeita_os_filtros_rapidos(self):
+        import zipfile
+        import re as _re
+        r = self.ler("/api/exportar?formato=xlsx&excluidos=todos&sem_site=1&celular=1", token=TOKEN)
+        linhas = len(_re.findall(r"<row ", zipfile.ZipFile(io.BytesIO(r.corpo)).read("xl/worksheets/sheet1.xml").decode("utf-8"))) - 1
+        self.assertEqual(linhas, self.lista("&sem_site=1&celular=1")["total"])
 
 
 if __name__ == "__main__":

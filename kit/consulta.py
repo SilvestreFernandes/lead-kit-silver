@@ -29,7 +29,8 @@ def ler_filtros(consulta):
         valores = consulta.get(nome)
         return valores[0] if valores else padrao
 
-    filtros = {"busca": None, "letras": None, "status": None, "texto": "", "excluidos": "nao"}
+    filtros = {"busca": None, "letras": None, "status": None, "texto": "", "excluidos": "nao",
+               "sem_site": False, "celular": False}
     if um("busca") not in (None, ""):
         try:
             filtros["busca"] = int(um("busca"))
@@ -50,6 +51,12 @@ def ler_filtros(consulta):
     if excluidos not in FILTROS_EXCLUIDOS:
         raise FiltroInvalido("O filtro 'excluidos' aceita só: " + ", ".join(FILTROS_EXCLUIDOS) + ".")
     filtros["excluidos"] = excluidos
+    for nome in ("sem_site", "celular"):
+        valor = um(nome, "").strip().lower()
+        if valor in ("1", "true", "sim"):
+            filtros[nome] = True
+        elif valor not in ("", "0", "false", "nao"):
+            raise FiltroInvalido(f"O filtro '{nome}' aceita só 1 ou 0.")
     return filtros
 
 
@@ -68,6 +75,11 @@ def filtrar(avaliados, filtros, ids_da_busca=None):
         if filtros["letras"] and r["letra"] not in filtros["letras"]:
             continue
         if filtros["status"] and l["status"] not in filtros["status"]:
+            continue
+        # Mesmos criterios das regras de nota (pontuacao.criterio_*).
+        if filtros.get("sem_site") and not pontuacao.criterio_sem_site(l):
+            continue
+        if filtros.get("celular") and not pontuacao.criterio_celular(l):
             continue
         if texto or digitos:
             acha = bool(texto) and any(texto in normalizar_nome(l[c] or "")
@@ -93,6 +105,7 @@ def resumo(r):
         "cidade": l["cidade"], "uf": l["uf"], "telefone": l["telefone"], "celular": l["celular"],
         "site": l["site"], "avaliacoes": l["avaliacoes"], "nota_maps": l["nota_maps"],
         "nota": r["nota"], "letra": r["letra"], "motivos": r["motivos"],
+        "por_que_curto": [a["texto"] for a in r["regras_ativas"]],
         "excluido_por": r["excluido_por"], "status": l["status"], "anotacao": l["anotacao"],
     }
 
@@ -105,6 +118,9 @@ def detalhe(r, perfil):
         "delivery": l["delivery"], "reserva": l["reserva"], "email_ligado": l["email_ligado"],
         "motivo_principal": r["motivo_principal"],
         "frase_do_motivo": modelos.frase_do_motivo(l, r["motivo_principal_id"]),
+        "por_que": [{"texto": modelos.frase_simples(l, a["id"]), "rotulo": a["texto"], "pontos": a["pontos"]}
+                    for a in r["regras_ativas"]],
+        "whatsapp_numero": numero_whatsapp(l),
         "mensagens": modelos.mensagens_do_lead(l, perfil, r["motivo_principal_id"]),
         "mensagem_editada": l["mensagem_editada"],
     })
@@ -174,12 +190,20 @@ def exportar_csv(avaliados):
 LIMITE_LINK_COM_MENSAGEM = 1800
 
 
+def numero_whatsapp(lead):
+    """'55' + DDD + celular, so digitos, ou None. So vale para telefone que parece celular (estimativa)."""
+    d = lead["telefone_digitos"]
+    if not lead["celular"] or len(d) != 11 or not d.isdigit():
+        return None
+    return "55" + d
+
+
 def link_whatsapp(lead, mensagem=""):
     """Link wa.me so para telefone que parece celular (estimativa). A mensagem vai pre-preenchida."""
-    d = lead["telefone_digitos"]
-    if not lead["celular"] or len(d) != 11:
+    numero = numero_whatsapp(lead)
+    if not numero:
         return None
-    url = f"https://wa.me/55{d}"
+    url = f"https://wa.me/{numero}"
     if mensagem:
         com_texto = url + "?text=" + quote(mensagem, safe="")
         if len(com_texto) <= LIMITE_LINK_COM_MENSAGEM:

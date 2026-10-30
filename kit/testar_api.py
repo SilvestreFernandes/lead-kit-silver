@@ -69,7 +69,7 @@ class Cliente:
         url = self.base + caminho
         if consulta:
             url += "?" + urllib.parse.urlencode({k: v for k, v in consulta.items() if v is not None})
-        return self._abrir(urllib.request.Request(url))
+        return self._abrir(urllib.request.Request(url, headers={"X-Token": self.token}))
 
     def escrever(self, metodo, caminho, corpo):
         req = urllib.request.Request(

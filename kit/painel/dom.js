@@ -1,14 +1,27 @@
 // Construção de elementos da página SEM innerHTML. Todo texto entra como texto (textContent),
 // porque nome, endereço e telefone vêm do Google Maps e não são confiáveis.
 
+// Atributos que carregam endereço: nunca podem apontar para código.
+const ATRIBUTOS_DE_ENDERECO = ['href', 'src', 'action', 'formaction', 'xlink:href'];
+const ESQUEMA_PERIGOSO = /^\s*(javascript|data|vbscript):/i;
+
 export function el(tag, atributos, ...filhos) {
   const no = document.createElement(tag);
   for (const [chave, valor] of Object.entries(atributos || {})) {
     if (valor === null || valor === undefined || valor === false) continue;
-    if (chave === 'class') no.className = valor;
+    const nome = chave.toLowerCase();
+    if (nome.startsWith('on')) {
+      // Só função vira ouvinte de evento. Texto num atributo de evento seria código escrito na página.
+      if (typeof valor !== 'function') throw new Error('Atributo de evento só aceita função: ' + chave);
+      no.addEventListener(nome.slice(2), valor);
+    } else if (chave === 'class') no.className = valor;
     else if (chave === 'dataset') Object.assign(no.dataset, valor);
-    else if (chave.startsWith('on') && typeof valor === 'function') no.addEventListener(chave.slice(2).toLowerCase(), valor);
-    else no.setAttribute(chave, valor === true ? '' : String(valor));
+    else {
+      if (ATRIBUTOS_DE_ENDERECO.includes(nome) && ESQUEMA_PERIGOSO.test(String(valor))) {
+        throw new Error('Endereço não permitido em ' + chave);
+      }
+      no.setAttribute(chave, valor === true ? '' : String(valor));
+    }
   }
   anexar(no, filhos);
   return no;

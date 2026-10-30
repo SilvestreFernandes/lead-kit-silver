@@ -130,7 +130,7 @@ class TestContratoComAApi(unittest.TestCase):
             texto = ler(p)
             for caminho in re.findall(r"\bler\(\s*['\"`](/api/[^'\"`?]*)", texto):
                 achadas.append(("GET", caminho, p.name))
-            for caminho in re.findall(r"\burlDownload\(\s*['\"`](/api/[^'\"`?]*)", texto):
+            for caminho in re.findall(r"\bbaixar\(\s*['\"`](/api/[^'\"`?]*)", texto):
                 achadas.append(("GET", caminho, p.name))
             for metodo, caminho in re.findall(r"\bescrever\(\s*['\"](\w+)['\"]\s*,\s*['\"`](/api/[^'\"`?]*)", texto):
                 achadas.append((metodo, caminho, p.name))
@@ -145,9 +145,11 @@ class TestContratoComAApi(unittest.TestCase):
             casou = [(m, escreve) for m, regex, _f, escreve in servidor.ROTAS if regex.match(real)]
             self.assertTrue(casou, f"{arquivo} chama {caminho}, que nao existe no servidor")
             self.assertIn(metodo, [m for m, _ in casou], f"{arquivo}: {metodo} {caminho}")
-            for m, escreve in casou:
+            for (m, escreve), (_m, _r, funcao, _e) in zip(casou, [r for r in servidor.ROTAS if r[1].match(real)]):
                 if m == metodo:
-                    self.assertEqual(escreve, metodo != "GET")  # so escrita leva token
+                    # escrita leva token; leitura nao, exceto as que entregam arquivo (exportar)
+                    esperado = metodo != "GET" or funcao in servidor.ROTAS_COM_TOKEN_NA_LEITURA
+                    self.assertEqual(escreve or funcao in servidor.ROTAS_COM_TOKEN_NA_LEITURA, esperado)
 
 
 class TestPainelServidoDeVerdade(unittest.TestCase):

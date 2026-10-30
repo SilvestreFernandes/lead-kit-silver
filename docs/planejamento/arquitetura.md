@@ -66,7 +66,7 @@ lead-kit-silver/
       app.js                casca: abas, estado do motor e do perfil, avisos, troca de tela
       tela-perfil.js        perfil ausente ou com problemas
       tela-buscar.js
-      tela-leads.js
+      tela-leads.js         tabela, filtros, carregamento por partes, gaveta do lead, exportação
       tela-oferta.js
   testes/
     fixtures.py             leads e perfil fictícios, em Python (o .gitignore bloqueia CSV)
@@ -84,7 +84,9 @@ lead-kit-silver/
     test_painel.py          confere o painel por texto: rotas usadas, nada de innerHTML, sem URL externa, sem travessão
     test_painel_js.py       roda js/util.test.mjs com o Node, se ele existir (só ferramenta de desenvolvimento)
     js/util.test.mjs        testes de util.js e api.js
-    demo_painel.py          servidor de demonstração com dados fictícios, um modo por estado do painel
+    js/leads.test.mjs       prova que dado malicioso do Google vira só texto na tela de Leads (DOM de mentira)
+    test_demo.py            a demonstração do painel sobe em todos os estados
+    demo_painel.py          servidor de demonstração com dados fictícios, um modo por estado do painel (ver o topo do arquivo)
     test_servidor.py
     test_xlsx.py
     test_testar_api.py
@@ -182,11 +184,11 @@ O servidor (`kit/servidor.py`) usa só a biblioteca padrão do Python, escuta em
 | `POST /api/buscas` | Cria uma busca: categoria, cidade e UF, tamanho, extras |
 | `GET /api/buscas` | Lista as buscas já feitas |
 | `GET /api/buscas/{id}` | Status e progresso de uma busca |
-| `GET /api/leads` | Lista com filtros: busca, nota, status, texto, excluídos. Devolve também `contagem_por_letra` (com todos os filtros menos o da letra, para os botões A, B e C) |
+| `GET /api/leads` | Lista com filtros: busca, nota, status, texto, excluídos, `sem_site=1` e `celular=1`. Devolve também `contagem_por_letra` (com todos os filtros menos o da letra, para os botões A, B e C) |
 | `GET /api/leads/{id}` | Um lead com motivos da nota e mensagem já preenchida |
 | `PATCH /api/leads/{id}` | Muda status, anotação ou a mensagem editada |
 | `POST /api/leads/reavaliar` | Recalcula as notas depois que o perfil mudou |
-| `GET /api/exportar` | Baixa os leads filtrados. `?formato=csv` (padrão) ou `?formato=xlsx` |
+| `GET /api/exportar` | Baixa os leads filtrados. `?formato=csv` (padrão) ou `?formato=xlsx`. **Exige o cabeçalho `X-Token`**, como as escritas, porque entrega os dados dos leads em arquivo |
 
 Fluxo de uma busca: o painel envia `POST /api/buscas`, o servidor geocodifica a cidade (Nominatim), cria o job no motor, acompanha o status em segundo plano, baixa o CSV quando termina, limpa e pontua cada linha e grava no SQLite. O painel só consulta o progresso.
 
@@ -220,8 +222,18 @@ O painel é uma página estática (`index.html`, `estilo.css` e alguns arquivos 
 | Tela | O que faz | Dados |
 | --- | --- | --- |
 | Buscar | Escolhe o tipo de negócio (sugerido pelo perfil), UF e cidade, tamanho da busca e o extra de e-mail. Um controle só pro tamanho: a cobertura é fixa em 10 km ao redor do centro da cidade. Mostra progresso | `POST /api/buscas`, `GET /api/buscas/{id}` |
-| Leads | Tabela com nota A, B, C, filtros, busca por texto, status e exportação. Ao abrir um lead: motivos da nota, mensagem editada na hora, botões de copiar e abrir WhatsApp | `GET /api/leads`, `PATCH /api/leads/{id}`, `GET /api/exportar` (CSV e .xlsx) |
+| Leads | Tabela com nota A, B, C, filtros (nota, status, texto, lista ou excluídos, busca), carregamento por partes de 100 e exportação. Ao abrir um lead (gaveta): "Por quê" em frases simples com os pontos, mensagem pronta e editável, copiar, abrir o WhatsApp, status e anotação. Fica sempre visível o aviso de conformidade quando a área é regulada ou a pessoa não sabe | `GET /api/leads`, `GET` e `PATCH /api/leads/{id}`, `GET /api/exportar` (CSV e .xlsx, com token), `GET /api/perfil`, `GET /api/buscas` |
 | Minha oferta | Edita o perfil: oferta, tom, regras e pesos, exclusões e os modelos de mensagem. Salvar recalcula as notas | `GET` e `PUT /api/perfil`, `POST /api/leads/reavaliar` |
+
+Regras da tela de Leads (fase 3):
+
+- **Dados do Google não são confiáveis.** Nome, categoria, endereço, site, telefone e e-mails entram na página só como texto (`el()` cria nós de texto, nunca `innerHTML`), e `el()` recusa atributo de evento em texto e `href`/`src` com `javascript:`, `data:` ou `vbscript:`. O site e o link do Maps só viram link se forem `http` ou `https`. Há teste com o nome `<img src=x onerror=alert(1)>`.
+- **WhatsApp:** o servidor entrega `whatsapp_numero` (`55` + DDD + celular, só dígitos, ou nulo), e o painel confere o formato de novo antes de montar `https://wa.me/<número>?text=<mensagem codificada>`. Só existe para telefone que parece celular (estimativa). A mensagem vem pronta de `modelos.py`, preenchida com os dados do lead. O link abre em outra aba, com `rel="noopener noreferrer"`. **O envio é sempre manual, um lead por vez: não há botão de envio em massa nem "copiar todos os números".**
+- **Uma mensagem editada por lead:** a edição vale para todos os canais, fica salva sozinha (depois de 800 ms parado, ao sair do campo e ao fechar a gaveta) e dá para voltar ao modelo.
+- **Lista grande:** o painel pede 100 leads por vez (`limite` e `offset`) e tem o botão "Mostrar mais N". A ordem é estável entre as partes (nota, nome, chave), e a contagem por letra vem da mesma consulta. Testado com 650 leads fictícios, no servidor e no navegador.
+- **Estados com mensagem própria:** carregando, nenhuma busca ainda (só o convite para buscar), todos fora da lista pelas exclusões, filtro sem resultado, erro ao carregar, falha de rede ao marcar status (o status volta ao que estava e a gaveta mostra o erro) e falha ao salvar edição (o texto continua na tela).
+- **Filtros rápidos "Sem site" e "Com celular":** usam as mesmas funções das regras de nota (`pontuacao.criterio_sem_site` e `pontuacao.criterio_celular`), então o filtro e a nota nunca discordam. Valem mesmo se a regra estiver desligada no perfil, entram na contagem por letra e na exportação.
+- **Exportação:** o painel baixa por `fetch` com o token e entrega o arquivo como `Blob`. Os botões ficam desligados quando não há leads na tela.
 
 Comportamentos que valem desde a v1:
 

@@ -128,3 +128,40 @@ class GeoDeMentira:
         if self.erro:
             raise self.erro
         return (-15.65, -47.79)
+
+
+def leads_em_massa(quantidade, semente=7):
+    """Leads FICTICIOS e reproduziveis, com sites, telefones, notas e categorias variados.
+
+    A cada 97 leads entram 3 unidades de uma mesma rede ficticia (para a marca de "possivel rede")
+    e a cada 41 um lead sem telefone (excluido).
+    """
+    import random
+    sorteio = random.Random(semente)
+    categorias = ["Padaria", "Restaurante", "Cafeteria", "Academia", "Clínica de estética", "Salão de beleza",
+                  "Mercearia", "Pizzaria", "Oficina mecânica", "Pet shop"]
+    linhas = []
+    n = 0
+    while len(linhas) < quantidade:
+        n += 1
+        if n % 97 == 0:
+            for unidade in ("Centro", "Norte", "Sul"):
+                if len(linhas) < quantidade:
+                    linhas.append(linha(10_000 + len(linhas), title=f"Rede Fictícia - {unidade}",
+                                        category="Padaria", address=f"Rua {unidade} {n}, Cidade Teste",
+                                        phone=f"(61) 3300-{n % 10000:04d}"))
+            continue
+        sorteado = sorteio.random()
+        site = "" if sorteado < 0.35 else ("https://www.instagram.com/exemplo%d" % n if sorteado < 0.55
+                                           else "https://site%d.exemplo.invalid" % n)
+        if n % 41 == 0:
+            telefone = ""
+        elif sorteio.random() < 0.6:
+            telefone = "(61) 9%04d-%04d" % (sorteio.randrange(10000), sorteio.randrange(10000))
+        else:
+            telefone = "(61) 3%03d-%04d" % (sorteio.randrange(1000), sorteio.randrange(10000))
+        linhas.append(linha(
+            10_000 + len(linhas), title=f"Negócio Fictício {n:04d}", category=sorteio.choice(categorias),
+            address=f"Rua Exemplo {n}, Bairro {n % 17}, Cidade Teste - DF", website=site, phone=telefone,
+            review_count=str(sorteio.randrange(0, 900)), review_rating=f"{sorteio.uniform(3.0, 5.0):.1f}"))
+    return linhas

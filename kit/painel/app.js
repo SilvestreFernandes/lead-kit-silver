@@ -27,6 +27,26 @@ const app = {
 
 const seguirEstado = seguidor();
 
+// Número ao lado de "Leads". null ou indefinido não muda nada.
+function atualizarContagem(n) {
+  if (n === null || n === undefined) return;
+  const marca = $('#aba-leads-contagem');
+  marca.textContent = String(n);
+  marca.hidden = n === 0;
+}
+
+async function carregarContagemDeLeads() {
+  if (app.contagemCarregada) return;
+  app.contagemCarregada = true;
+  try {
+    const dados = await ler('/api/leads', { limite: 1 });
+    atualizarContagem(dados.total);
+  } catch (erro) {
+    if (!(erro instanceof ErroApi)) throw erro;
+    app.contagemCarregada = false;  // tenta de novo na próxima verificação
+  }
+}
+
 export async function atualizarEstado() {
   const resultado = await seguirEstado((sinal) => ler('/api/estado', null, sinal).then(
     (estado) => ({ estado }),
@@ -35,6 +55,7 @@ export async function atualizarEstado() {
   if (resultado.estado) { app.estado = resultado.estado; app.falha = null; } else { app.falha = resultado.erro; }
   app.carregou = true;
   desenhar();
+  if (situacaoDoPerfil(app.estado) === 'ok') carregarContagemDeLeads();
   return app.estado;
 }
 
@@ -119,7 +140,7 @@ function desenharTela() {
   area.tela.removeAttribute('aria-labelledby');
 
   const contexto = {
-    estado: () => app.estado, avisar, irPara, atualizarEstado,
+    estado: () => app.estado, avisar, irPara, atualizarEstado, atualizarContagem,
   };
   const aoVerificar = () => atualizarEstado();
 

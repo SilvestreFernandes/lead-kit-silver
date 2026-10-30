@@ -42,6 +42,12 @@ def frase_do_motivo(lead, regra_id):
     })
 
 
+def frase_simples(lead, regra_id):
+    """A mesma frase de {motivo}, pronta para ler na tela: comeca com maiuscula e termina com ponto."""
+    frase = frase_do_motivo(lead, regra_id)
+    return (frase[:1].upper() + frase[1:] + ".") if frase else ""
+
+
 def preencher(modelo, lead, perfil, regra_id):
     dados = {
         "nome": lead["nome"],

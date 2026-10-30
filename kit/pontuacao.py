@@ -30,11 +30,23 @@ def cortes(perfil):
             _teto(soma * round(REGRAS["cortes"]["b"] * 100), 100))
 
 
+# Criterios compartilhados: a regra de nota (sem_site, celular) e os filtros rapidos do painel usam estas
+# mesmas funcoes, entao o filtro e a nota nunca discordam sobre o mesmo lead.
+def criterio_sem_site(lead):
+    """Sem site: o Google Maps nao mostra endereco de site para o negocio."""
+    return not lead["site"]
+
+
+def criterio_celular(lead):
+    """Celular: telefone com DDD e 9 digitos comecando em 9. E uma estimativa, nao confirma WhatsApp."""
+    return bool(lead["celular"])
+
+
 def _acerto(regra_id, lead, cfg, peso, email_ligado):
     """Devolve os pontos que a regra rende neste lead (0 se nao vale)."""
     nota, avaliacoes = lead["nota_maps"], lead["avaliacoes"]
     if regra_id == "sem_site":
-        return peso if not lead["site"] else 0
+        return peso if criterio_sem_site(lead) else 0
     if regra_id == "so_instagram":
         return peso if eh_rede_social(lead["site"]) else 0
     if regra_id == "nota_alta":
@@ -52,7 +64,7 @@ def _acerto(regra_id, lead, cfg, peso, email_ligado):
     if regra_id == "poucas_avaliacoes":
         return peso if avaliacoes is not None and avaliacoes < cfg["maximo"] else 0
     if regra_id == "celular":
-        return peso if lead["celular"] else 0
+        return peso if criterio_celular(lead) else 0
     if regra_id == "delivery":
         return peso if lead["delivery"] else 0
     if regra_id == "reserva":
@@ -79,6 +91,7 @@ def pontuar(lead, perfil, email_ligado=False):
     letra = "A" if total >= corte_a else "B" if total >= corte_b else "C"
     principal = max(pontos, key=lambda p: p[0]) if pontos else None  # empate: a primeira do perfil
     return {"nota": total, "letra": letra, "motivos": motivos,
+            "regras_ativas": [{"id": p[2], "texto": p[1], "pontos": p[0]} for p in pontos],
             "motivo_principal": principal[1] if principal else "",
             "motivo_principal_id": principal[2] if principal else None}
 

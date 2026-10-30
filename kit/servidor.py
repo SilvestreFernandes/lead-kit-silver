@@ -289,6 +289,9 @@ def rota_exportar(srv, params, consulta_, corpo):
                     {"Content-Disposition": 'attachment; filename="leads.csv"'})
 
 
+# Rotas de LEITURA que mesmo assim exigem o token, porque entregam os dados dos leads em arquivo.
+ROTAS_COM_TOKEN_NA_LEITURA = {rota_exportar}
+
 # metodo, caminho, funcao, escreve?
 ROTAS = [
     ("GET", r"/api/estado", rota_estado, False),
@@ -397,6 +400,8 @@ class Manipulador(BaseHTTPRequestHandler):
         corpo = {}
         if escreve:
             corpo = self._ler_corpo_de_escrita()
+        elif funcao in ROTAS_COM_TOKEN_NA_LEITURA:
+            self._exigir_token()
         status, dados = None, None
         resultado = funcao(srv, params, consulta_, corpo)
         if isinstance(resultado, Resposta):
@@ -404,10 +409,13 @@ class Manipulador(BaseHTTPRequestHandler):
         status, dados = resultado
         return json_resposta(status, dados)
 
-    def _ler_corpo_de_escrita(self):
+    def _exigir_token(self):
         enviado = self.headers.get("X-Token") or ""
         if not hmac.compare_digest(enviado.encode("utf-8"), self.server.token.encode("utf-8")):
             raise Erro(401, "Falta a permissão para alterar dados. Recarregue o painel.")
+
+    def _ler_corpo_de_escrita(self):
+        self._exigir_token()
         tipo = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         if tipo != "application/json":
             raise Erro(415, "Envie o corpo como application/json.")

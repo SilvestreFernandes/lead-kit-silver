@@ -88,6 +88,77 @@ class TestFiltros(unittest.TestCase):
         self.assertNotIn("mensagens", consulta.resumo(r))
 
 
+class TestFiltrosRapidos(unittest.TestCase):
+    """Sem site e Com celular usam os mesmos criterios das regras de nota."""
+
+    def setUp(self):
+        from testes.fixtures import leads_em_massa
+        self.conn, _ = montar(leads_em_massa(300))
+        self.addCleanup(self.conn.close)
+        self.perfil = perfil_ficticio()
+        self.perfil["exclusoes"] = []  # nada excluido: o filtro e a nota valem para todos
+        self.todos = consulta.avaliar(self.conn, self.perfil)
+
+    def ids(self, **extra):
+        base = {"busca": None, "letras": None, "status": None, "texto": "", "excluidos": "todos",
+                "sem_site": False, "celular": False}
+        base.update(extra)
+        return {r["lead"]["id"] for r in consulta.filtrar(self.todos, base)}
+
+    def test_sem_site_bate_exatamente_com_a_regra_de_nota(self):
+        pelo_filtro = self.ids(sem_site=True)
+        pela_nota = {r["lead"]["id"] for r in self.todos if any(a["id"] == "sem_site" for a in r["regras_ativas"])}
+        self.assertEqual(pelo_filtro, pela_nota)
+        self.assertTrue(0 < len(pelo_filtro) < len(self.todos))
+
+    def test_celular_bate_exatamente_com_a_regra_de_nota(self):
+        pelo_filtro = self.ids(celular=True)
+        pela_nota = {r["lead"]["id"] for r in self.todos if any(a["id"] == "celular" for a in r["regras_ativas"])}
+        self.assertEqual(pelo_filtro, pela_nota)
+        self.assertTrue(0 < len(pelo_filtro) < len(self.todos))
+
+    def test_os_dois_criterios_sao_as_mesmas_funcoes_da_nota(self):
+        from kit import pontuacao
+        for r in self.todos:
+            l = r["lead"]
+            self.assertEqual(pontuacao.criterio_sem_site(l), l["site"] == "")
+            self.assertEqual(pontuacao.criterio_celular(l), l["celular"])
+
+    def test_filtros_combinam_com_e(self):
+        ambos = self.ids(sem_site=True, celular=True)
+        self.assertEqual(ambos, self.ids(sem_site=True) & self.ids(celular=True))
+        self.assertTrue(ambos)
+
+    def test_so_instagram_conta_como_tendo_site_igual_a_regra_sem_site(self):
+        so_rede = [r for r in self.todos if "instagram.com" in r["lead"]["site"]]
+        self.assertTrue(so_rede)
+        sem_site = self.ids(sem_site=True)
+        self.assertTrue(all(r["lead"]["id"] not in sem_site for r in so_rede))
+
+    def test_telefone_fixo_e_vazio_nao_sao_celular(self):
+        celular = self.ids(celular=True)
+        for r in self.todos:
+            if not r["lead"]["telefone"] or r["lead"]["telefone_digitos"][2:3] != "9":
+                self.assertNotIn(r["lead"]["id"], celular)
+
+    def test_o_filtro_vale_mesmo_com_a_regra_desligada_no_perfil(self):
+        self.perfil["pontuacao"]["regras"] = [{"id": "nota_alta", "peso": 2}]
+        todos = consulta.avaliar(self.conn, self.perfil)
+        base = {"busca": None, "letras": None, "status": None, "texto": "", "excluidos": "todos",
+                "sem_site": True, "celular": False}
+        self.assertEqual({r["lead"]["id"] for r in consulta.filtrar(todos, base)}, self.ids(sem_site=True))
+
+    def test_ler_filtros_aceita_1_e_0_e_recusa_o_resto(self):
+        f = consulta.ler_filtros({"sem_site": ["1"], "celular": ["true"]})
+        self.assertEqual((f["sem_site"], f["celular"]), (True, True))
+        f = consulta.ler_filtros({"sem_site": ["0"], "celular": [""]})
+        self.assertEqual((f["sem_site"], f["celular"]), (False, False))
+        self.assertEqual(consulta.ler_filtros({})["sem_site"], False)
+        for ruim in ({"sem_site": ["talvez"]}, {"celular": ["2"]}):
+            with self.assertRaises(consulta.FiltroInvalido):
+                consulta.ler_filtros(ruim)
+
+
 class TestProtecaoDoCsv(unittest.TestCase):
     def test_proteger_marca_so_o_que_vira_formula(self):
         for perigoso in ("=1+1", "+55", "-5", "@soma", "\t=x", "\r=x"):
@@ -118,6 +189,23 @@ class TestProtecaoDoCsv(unittest.TestCase):
         for tel in ("+55 61 98888-0003", "+1 202 555 0100", "+55 61 123", "(61) 3333-0000", "@x"):
             saida = telefone_csv(tel)
             self.assertFalse(saida.startswith(consulta.PERIGOSOS), saida)
+
+
+class TestNumeroWhatsapp(unittest.TestCase):
+    def numero(self, telefone):
+        return consulta.numero_whatsapp(limpeza.limpar_linha(linha(1, phone=telefone)))
+
+    def test_celular_brasileiro_vira_55_ddd_numero(self):
+        self.assertEqual(self.numero("(61) 99322-4592"), "5561993224592")
+        self.assertEqual(self.numero("+55 61 98888-0003"), "5561988880003")
+
+    def test_fixo_e_vazio_e_estrangeiro_nao_viram_numero(self):
+        for telefone in ("(61) 3387-2235", "", "+1 202 555 0100", "123", "abc"):
+            self.assertIsNone(self.numero(telefone), telefone)
+
+    def test_sempre_so_digitos(self):
+        n = self.numero("(61) 99322-4592")
+        self.assertTrue(n.isdigit() and len(n) == 13)
 
 
 class TestExportacao(unittest.TestCase):

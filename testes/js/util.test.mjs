@@ -143,7 +143,7 @@ test('422 e 409 carregam a lista de erros', async () => {
 
 test('servidor fora do ar vira erro de rede', async () => {
   simular(new TypeError('Failed to fetch'));
-  await assert.rejects(api.ler('/api/estado'), (e) => e.tipo === 'rede' && e.status === 0);
+  await assert.rejects(api.ler('/api/estado'), (e) => e.tipo === 'rede' && e.status === 0 && /parou de responder\. Confira/.test(e.message));
 });
 
 test('resposta de erro que não é JSON não quebra', async () => {
@@ -157,8 +157,39 @@ test('cancelamento (AbortError) passa direto, sem virar erro de rede', async () 
   await assert.rejects(api.ler('/api/estado'), (e) => e.name === 'AbortError');
 });
 
-test('urlDownload só monta o endereço', () => {
-  assert.equal(api.urlDownload('/api/exportar', { formato: 'xlsx', letra: 'A' }), '/api/exportar?formato=xlsx&letra=A');
+test('baixar leva o token, monta a query e devolve o arquivo com o nome seguro', async () => {
+  const chamadas = [];
+  globalThis.document = { querySelector: () => ({ content: 'tok-123' }) };
+  globalThis.fetch = async (url, opcoes) => {
+    chamadas.push({ url, opcoes });
+    return {
+      ok: true, status: 200, blob: async () => ({ tamanho: 5 }),
+      headers: { get: (n) => (n === 'Content-Disposition' ? 'attachment; filename="leads.xlsx"' : null) },
+    };
+  };
+  const { blob, nome } = await api.baixar('/api/exportar', { formato: 'xlsx', letra: 'A', q: '' });
+  assert.equal(chamadas[0].url, '/api/exportar?formato=xlsx&letra=A');
+  assert.equal(chamadas[0].opcoes.method, 'GET');
+  assert.equal(chamadas[0].opcoes.headers['X-Token'], 'tok-123');
+  assert.equal(nome, 'leads.xlsx');
+  assert.deepEqual(blob, { tamanho: 5 });
+});
+
+test('baixar: 401 vira erro de token e nenhum arquivo sai', async () => {
+  globalThis.document = { querySelector: () => ({ content: 'velho' }) };
+  globalThis.fetch = async () => ({ ok: false, status: 401, text: async () => '{"erro":"Falta a permissão."}', headers: { get: () => null } });
+  await assert.rejects(api.baixar('/api/exportar', { formato: 'csv' }), (e) => e.tipo === 'token' && e.status === 401);
+});
+
+test('baixar: servidor fora do ar vira erro de rede', async () => {
+  globalThis.document = { querySelector: () => ({ content: 'x' }) };
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  await assert.rejects(api.baixar('/api/exportar', {}), (e) => e.tipo === 'rede');
+});
+
+test('api.js não tem mais urlDownload (download sem token)', () => {
+  assert.equal(api.urlDownload, undefined);
+  assert.equal(typeof api.baixar, 'function');
 });
 
 test('seguidor: só a última chamada vale', async () => {
@@ -187,4 +218,122 @@ test('seguidor: resposta velha que chega depois é descartada mesmo sem cancelar
 test('seguidor repassa erros de verdade', async () => {
   const seguir = api.seguidor();
   await assert.rejects(seguir(async () => { throw new Error('falhou'); }), /falhou/);
+});
+
+// ---------- Leads: funções puras
+
+test('nomeDoArquivo só aceita nome simples', () => {
+  assert.equal(util.nomeDoArquivo('attachment; filename="leads.xlsx"'), 'leads.xlsx');
+  assert.equal(util.nomeDoArquivo('attachment; filename=leads.csv'), 'leads.csv');
+  for (const ruim of ['attachment; filename="../../x.exe"', 'attachment; filename="a/b.csv"', 'attachment; filename="a b.csv"', '', null, undefined, 'attachment']) {
+    assert.equal(util.nomeDoArquivo(ruim), 'leads', String(ruim));
+  }
+  assert.equal(util.nomeDoArquivo('', 'padrao.csv'), 'padrao.csv');
+});
+
+test('linkWhatsApp: só número no formato 55 + DDD + celular, só dígitos', () => {
+  const ok = util.linkWhatsApp('5561999990001', 'Oi, tudo bem?');
+  assert.equal(ok.url, 'https://wa.me/5561999990001?text=Oi%2C%20tudo%20bem%3F');
+  assert.equal(ok.comMensagem, true);
+  assert.equal(util.linkWhatsApp('5561999990001', '').url, 'https://wa.me/5561999990001');
+  assert.equal(util.linkWhatsApp('5561999990001', '   ').comMensagem, false);
+  const ruins = [
+    '', null, undefined, 5561999990001, '556133330001', '55619999900011', '5561899990001', '5501999990001',
+    '5561999990001"><script>', 'https://evil.invalid/5561999990001', '+5561999990001', '55 61 99999-0001',
+    '5561\n999990001', '5561999990001 ', ' 5561999990001', '55619999900a1', '1234',
+  ];
+  for (const r of ruins) assert.equal(util.linkWhatsApp(r, 'oi'), null, String(r));
+});
+
+test('linkWhatsApp: a mensagem é codificada e nunca vira parte do endereço', () => {
+  const l = util.linkWhatsApp('5561999990001', 'a&b=c#d?e "f" <g>');
+  assert.equal(new URL(l.url).hostname, 'wa.me');
+  assert.equal(new URL(l.url).pathname, '/5561999990001');
+  assert.equal(new URL(l.url).searchParams.get('text'), 'a&b=c#d?e "f" <g>');
+  assert.equal([...new URL(l.url).searchParams.keys()].length, 1);
+});
+
+test('linkWhatsApp: mensagem grande demais abre a conversa sem texto', () => {
+  const l = util.linkWhatsApp('5561999990001', 'ã'.repeat(400));
+  assert.equal(l.url, 'https://wa.me/5561999990001');
+  assert.equal(l.comMensagem, false);
+});
+
+test('tipoDeSite', () => {
+  assert.equal(util.tipoDeSite(''), 'nenhum');
+  assert.equal(util.tipoDeSite(null), 'nenhum');
+  assert.equal(util.tipoDeSite('https://www.instagram.com/x'), 'rede');
+  assert.equal(util.tipoDeSite('instagram.com/x'), 'rede');
+  assert.equal(util.tipoDeSite('https://m.facebook.com/x'), 'rede');
+  assert.equal(util.tipoDeSite('https://meusite.invalid'), 'tem');
+  assert.equal(util.tipoDeSite('https://naoinstagram.com.invalid'), 'tem');
+  assert.equal(util.tipoDeSite('https://exemplo.invalid/instagram.com'), 'tem');
+});
+
+test('urlSegura: só http e https', () => {
+  assert.equal(util.urlSegura('https://a.invalid/x?y=1'), 'https://a.invalid/x?y=1');
+  assert.equal(util.urlSegura(' http://a.invalid '), 'http://a.invalid/');
+  for (const ruim of ['javascript:alert(1)', 'data:text/html,x', 'file:///c:/x', 'ftp://a.invalid', 'www.sem-esquema.com', '', null, 'https://', 'https://' + 'a'.repeat(2100)]) {
+    assert.equal(util.urlSegura(ruim), null, String(ruim).slice(0, 30));
+  }
+});
+
+test('avisoDeConformidade', () => {
+  const aviso = (r) => util.avisoDeConformidade({ conformidade: { restricoes: r } });
+  for (const nenhum of ['nao', 'Não', 'NAO', ' não ', '', undefined]) assert.equal(aviso(nenhum), null, String(nenhum));
+  assert.equal(util.avisoDeConformidade({}), null);
+  assert.equal(util.avisoDeConformidade(null), null);
+  assert.deepEqual(aviso('nao sei'), { tipo: 'incerto', detalhe: '' });
+  assert.deepEqual(aviso('Não sei'), { tipo: 'incerto', detalhe: '' });
+  assert.deepEqual(aviso('nao_sei'), { tipo: 'incerto', detalhe: '' });
+  assert.deepEqual(aviso('sim: advocacia (OAB)'), { tipo: 'regulado', detalhe: 'advocacia (OAB)' });
+  assert.deepEqual(aviso('Sim'), { tipo: 'regulado', detalhe: '' });
+  assert.deepEqual(aviso('medicina, CFM'), { tipo: 'regulado', detalhe: 'medicina, CFM' });
+});
+
+test('formatarNota, rotuloDoStatus e resumoDaLista', () => {
+  assert.equal(util.formatarNota(4.8), '4,8');
+  assert.equal(util.formatarNota('4.5'), '4,5');
+  assert.equal(util.formatarNota(5), '5');
+  assert.equal(util.formatarNota(null), '-');
+  assert.equal(util.formatarNota(undefined), '-');
+  assert.equal(util.rotuloDoStatus('respondeu'), 'Respondeu');
+  assert.equal(util.rotuloDoStatus('qualquer'), 'Novo');
+  assert.equal(util.resumoDaLista(0, 0), 'Nenhum lead');
+  assert.equal(util.resumoDaLista(1, 1), '1 lead');
+  assert.equal(util.resumoDaLista(12, 12), '12 leads');
+  assert.equal(util.resumoDaLista(100, 650), 'Mostrando 100 de 650 leads');
+});
+
+test('lista grande: quantos faltam e como pedir a próxima parte', () => {
+  assert.equal(util.PAGINA_LEADS, 100);
+  assert.equal(util.quantosFaltam(100, 650), 100);
+  assert.equal(util.quantosFaltam(600, 650), 50);
+  assert.equal(util.quantosFaltam(650, 650), 0);
+  assert.equal(util.quantosFaltam(700, 650), 0);
+  assert.equal(util.quantosFaltam(0, 0), 0);
+});
+
+test('situacaoDaLista: vazia sem buscas, sem resultado com filtro, tudo excluído', () => {
+  const padrao = { ...util.FILTROS_PADRAO };
+  assert.equal(util.situacaoDaLista({ total: 5, filtros: padrao, buscasFeitas: true }), 'lista');
+  assert.equal(util.situacaoDaLista({ total: 0, filtros: padrao, buscasFeitas: false }), 'nenhuma-busca');
+  assert.equal(util.situacaoDaLista({ total: 0, filtros: padrao, buscasFeitas: true }), 'sem-leads-na-lista');
+  assert.equal(util.situacaoDaLista({ total: 0, filtros: { ...padrao, letra: 'A' }, buscasFeitas: true }), 'sem-resultado');
+  assert.equal(util.situacaoDaLista({ total: 0, filtros: { ...padrao, q: 'xis' }, buscasFeitas: false }), 'sem-resultado');
+  assert.equal(util.situacaoDaLista({ total: 0, filtros: { ...padrao, excluidos: 'todos' }, buscasFeitas: true }), 'sem-resultado');
+});
+
+test('filtros rápidos Sem site e Com celular contam como filtro ligado quando valem 1', () => {
+  assert.deepEqual(util.filtrosAtivos({ ...util.FILTROS_PADRAO, sem_site: '1' }), ['sem_site']);
+  assert.deepEqual(util.filtrosAtivos({ ...util.FILTROS_PADRAO, sem_site: '1', celular: '1' }), ['sem_site', 'celular']);
+  assert.deepEqual(util.filtrosAtivos({ ...util.FILTROS_PADRAO, celular: '' }), []);
+  assert.equal(util.situacaoDaLista({ total: 0, filtros: { ...util.FILTROS_PADRAO, sem_site: '1' }, buscasFeitas: true }), 'sem-resultado');
+  assert.equal(util.montarQuery({ sem_site: '1', celular: '', letra: 'A' }), '?sem_site=1&letra=A');
+});
+
+test('filtrosAtivos só conta o que difere do padrão', () => {
+  assert.deepEqual(util.filtrosAtivos({ ...util.FILTROS_PADRAO }), []);
+  assert.deepEqual(util.filtrosAtivos({ ...util.FILTROS_PADRAO, letra: 'B', busca: 3 }), ['letra', 'busca']);
+  assert.deepEqual(util.filtrosAtivos(null), []);
 });

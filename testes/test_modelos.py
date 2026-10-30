@@ -64,6 +64,18 @@ class TestModelos(unittest.TestCase):
         self.assertTrue(all(v["padrao"] for v in m.values()))
         self.assertIn("não escrevo mais", m["whatsapp"]["texto"])
 
+    def test_nenhum_modelo_poe_artigo_antes_do_nome(self):
+        import json
+        import re
+        from testes.fixtures import perfil_ficticio
+        artigo = re.compile(r"(?<!\w)(a|o|as|os|da|do|das|dos|na|no|nas|nos|à|ao)\s+\{(nome|categoria)\}", re.I)
+        exemplo = json.loads((modelos.Path(__file__).resolve().parent.parent
+                              / "entrevista" / "perfil.exemplo.json").read_text(encoding="utf-8"))
+        textos = (list(modelos.MODELOS_PROVISORIOS.values()) + list(exemplo["mensagens"].values())
+                  + list(perfil_ficticio()["mensagens"].values()))
+        for texto in textos:
+            self.assertIsNone(artigo.search(texto), texto)
+
     def test_modelos_provisorios_passam_no_validador(self):
         from kit import validar_perfil
         perfil = perfil_ficticio()

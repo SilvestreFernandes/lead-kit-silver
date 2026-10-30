@@ -139,6 +139,7 @@ O que a IA deve seguir ao escrever:
 - Mensagem curta, de 3 a 5 linhas, no tom escolhido na pergunta 9.
 - Começar pelo negócio do lead, não por quem escreve.
 - Citar um fato real e verificável, usando `{motivo}`. Nada de elogio genérico.
+- Nunca pôr artigo antes de `{nome}`: "Vi que {nome} tem...", não "Vi que a {nome} tem...". O gênero do negócio é desconhecido (ver `arquitetura.md`).
 - Terminar com a oferta de entrada da pergunta 10 e uma pergunta fácil de responder.
 - Sem promessa de resultado, sem pressão, sem urgência inventada.
 - Dar uma saída clara, por exemplo "se não fizer sentido, é só me avisar que não escrevo mais".
@@ -146,7 +147,7 @@ O que a IA deve seguir ao escrever:
 
 Exemplo de WhatsApp no tom amigável:
 
-> Oi, tudo bem? Aqui é o {meu_nome}, da {minha_empresa}. Vi que a {nome} tem ótimas avaliações em {cidade}, mas {motivo}. Eu faço um diagnóstico grátis com ideias pra isso. Posso te mandar? Se não fizer sentido, é só avisar que não escrevo mais.
+> Oi, tudo bem? Aqui é o {meu_nome}, da {minha_empresa}. Vi que {nome} tem ótimas avaliações em {cidade}, mas {motivo}. Eu faço um diagnóstico grátis com ideias pra isso. Posso te mandar? Se não fizer sentido, é só avisar que não escrevo mais.
 
 ## Validação
 

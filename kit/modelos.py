@@ -14,11 +14,11 @@ MARCADOR = re.compile(r"\{([a-z_]+)\}")
 # PROVISORIO, ate a fase 4. Na fase 4 a IA escreve os modelos do jeito do usuario e eles ficam em
 # perfil["mensagens"]. Enquanto o perfil nao tiver modelo para o canal, o kit usa este.
 MODELOS_PROVISORIOS = {
-    "whatsapp": ("Oi, tudo bem? Aqui é {meu_nome}, da {minha_empresa}. Vi a {nome}, em {cidade}, "
+    "whatsapp": ("Oi, tudo bem? Aqui é {meu_nome}, da {minha_empresa}. Vi {nome}, em {cidade}, "
                  "e notei que {motivo}. Posso te mandar uma ideia rápida? "
                  "Se não fizer sentido, é só avisar que não escrevo mais."),
-    "email": ("Assunto: Uma ideia para a {nome}\n\n"
-              "Olá! Sou {meu_nome}, da {minha_empresa}. Vi a {nome}, em {cidade}, e notei que {motivo}. "
+    "email": ("Assunto: Uma ideia para {nome}\n\n"
+              "Olá! Sou {meu_nome}, da {minha_empresa}. Vi {nome}, em {cidade}, e notei que {motivo}. "
               "Posso enviar uma ideia rápida? Se não fizer sentido, é só avisar que não escrevo mais."),
 }
 

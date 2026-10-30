@@ -32,6 +32,6 @@
   },
   "conformidade": {"restricoes": "nao"},
   "mensagens": {
-    "whatsapp": "Oi, tudo bem? Aqui é o {meu_nome}, da {minha_empresa}. Vi a {nome}, em {cidade}, e notei que {motivo}. Faço um diagnóstico grátis com ideias pra isso. Posso te mandar? Se não fizer sentido, é só avisar que não escrevo mais."
+    "whatsapp": "Oi, tudo bem? Aqui é o {meu_nome}, da {minha_empresa}. Vi {nome}, em {cidade}, e notei que {motivo}. Faço um diagnóstico grátis com ideias pra isso. Posso te mandar? Se não fizer sentido, é só avisar que não escrevo mais."
   }
 }

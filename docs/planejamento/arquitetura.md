@@ -212,6 +212,14 @@ Comportamentos que valem desde a v1:
 - O painel avisa uma vez, na primeira busca grande, sobre o risco de bloqueio temporário do IP.
 - Respeita `prefers-reduced-motion` e funciona em tela de notebook e de celular.
 
+## Regras dos modelos de mensagem
+
+Valem para a IA que escreve os modelos (fase 4), para o `perfil.json` e para o modelo provisório que o kit usa até lá. A lista completa de regras de escrita está em `entrevista-e-perfil.md`.
+
+- **Sem artigo antes do nome do negócio.** O marcador `{nome}` leva o nome como o Google Maps entrega, e o gênero do negócio é desconhecido. Escreva "Vi que {nome} tem..." e nunca "Vi que a {nome} tem..." nem "o {nome}". Assim a frase fica certa para "Padaria Sol" e para "Império dos Pães".
+- O mesmo vale para "da", "do", "na" e "no" antes de `{nome}` e `{categoria}`: reescreva a frase para não precisar deles.
+- O `{motivo}` é uma frase neutra e comprovada pelo dado (ver `regras.json`), sem artigo nem gênero.
+
 ## Camada pública e camada paga
 
 O motor e o kit base são abertos e qualquer pessoa pode baixá-los de graça. O que o comprador paga é a integração pronta, em português, com qualificação e abordagem: a entrevista, a nota, o painel, os modelos e o guia. Essa honestidade entra na página de venda.

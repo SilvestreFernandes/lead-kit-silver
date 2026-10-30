@@ -48,6 +48,8 @@ lead-kit-silver/
     motor.py                cliente do motor (jobs, status, download)
     geocodificar.py         cidade para latitude e longitude (Nominatim)
     limpeza.py              lê o CSV do motor, limpa os campos e tira duplicados
+    grade.py                pontos de uma busca maior (centro e quatro pontos ao redor)
+    xlsx.py                 gera planilha .xlsx só com zipfile e XML escritos à mão
     pontuacao.py            regras e nota A, B, C
     regras.json             tabela de regras e pesos padrão
     modelos.py              troca dos marcadores nas mensagens (adiantado na fase 2, com modelo provisório)
@@ -55,8 +57,13 @@ lead-kit-silver/
     banco.py                SQLite dos leads e do status
     painel/
       index.html
-      app.js
       estilo.css
+      api.js                fala com o servidor (token, erros, respostas antigas)
+      util.js               funções puras: formatação, filtros, links
+      app.js                casca, abas, estado do motor e do perfil
+      tela-buscar.js
+      tela-leads.js
+      tela-oferta.js
   testes/
     fixtures.py             leads e perfil fictícios, em Python (o .gitignore bloqueia CSV)
     perfis/                 três perfis de teste
@@ -64,12 +71,15 @@ lead-kit-silver/
     test_buscar.py
     test_consulta.py
     test_geocodificar.py
+    test_grade.py
     test_limpeza.py
     test_modelos.py
     test_motor.py
     test_pontuacao.py
     test_validacao.py
+    test_painel.py          confere o painel por texto: rotas usadas, nada de innerHTML, sem URL externa
     test_servidor.py
+    test_xlsx.py
     test_testar_api.py
   docs/
     planejamento/           este documento e entrevista-e-perfil.md
@@ -159,16 +169,17 @@ O servidor (`kit/servidor.py`) usa só a biblioteca padrão do Python, escuta em
 | Rota | Pra quê |
 | --- | --- |
 | `GET /api/estado` | Motor no ar, perfil válido, versão do kit |
+| `GET /api/opcoes` | Regras com pesos padrão, exclusões, marcadores, tamanhos de busca, UFs e status. O painel monta os formulários com isso, sem repetir a lista no JavaScript |
 | `GET /api/perfil` | Lê o perfil |
 | `PUT /api/perfil` | Grava o perfil, mas só depois de passar no validador |
-| `POST /api/buscas` | Cria uma busca: categorias, cidade e UF, cobertura, tamanho, extras |
+| `POST /api/buscas` | Cria uma busca: categoria, cidade e UF, tamanho, extras |
 | `GET /api/buscas` | Lista as buscas já feitas |
 | `GET /api/buscas/{id}` | Status e progresso de uma busca |
-| `GET /api/leads` | Lista com filtros: busca, nota, status, texto, excluídos |
+| `GET /api/leads` | Lista com filtros: busca, nota, status, texto, excluídos. Devolve também `contagem_por_letra` (com todos os filtros menos o da letra, para os botões A, B e C) |
 | `GET /api/leads/{id}` | Um lead com motivos da nota e mensagem já preenchida |
 | `PATCH /api/leads/{id}` | Muda status, anotação ou a mensagem editada |
 | `POST /api/leads/reavaliar` | Recalcula as notas depois que o perfil mudou |
-| `GET /api/exportar` | Baixa um CSV dos leads filtrados |
+| `GET /api/exportar` | Baixa os leads filtrados. `?formato=csv` (padrão) ou `?formato=xlsx` |
 
 Fluxo de uma busca: o painel envia `POST /api/buscas`, o servidor geocodifica a cidade (Nominatim), cria o job no motor, acompanha o status em segundo plano, baixa o CSV quando termina, limpa e pontua cada linha e grava no SQLite. O painel só consulta o progresso.
 
@@ -177,7 +188,9 @@ Armazenamento em `dados/leads.db` (SQLite):
 - **buscas:** id, data, parâmetros, status, id do job no motor.
 - **leads:** dados do Maps, nota, letra, motivos, status (novo, contatado, respondeu, fechado, descartado), anotação, mensagem editada.
 - **Duplicados:** o mesmo negócio em buscas diferentes vira um lead só. A chave é o identificador do Maps se o CSV trouxer um, senão o nome mais o endereço normalizados. Colunas conferidas na fase 0 com um CSV real (36 colunas, lista em `fase0-verificacao-motor.md`). `place_id` e `cid` vieram preenchidos em todas as linhas e servem de chave contra duplicados. `order_online` e `reservations` chegam como JSON, não como texto simples. `emails` só vem preenchido quando o job usa a opção de e-mail (`email: true`), e isso deixa a busca mais lenta. Na API do motor o campo `lang` usa código de duas letras (`pt`), e `pt-BR` é recusado.
-- A exportação da v1 é CSV em UTF-8 com BOM, pra abrir certo no Excel. Planilha `.xlsx` fica pra depois, porque exigiria uma biblioteca.
+- A exportação tem dois formatos, os dois só com a biblioteca padrão do Python:
+  - **CSV** em UTF-8 com BOM, pra abrir certo no Excel.
+  - **.xlsx** feito à mão com `zipfile` e XML (`kit/xlsx.py`), pensado como relatório pronto pra mostrar a um cliente. Colunas em português: Negócio, Nota, Pontos, Motivos, Categoria, Telefone, WhatsApp, Site, Endereço, Avaliação no Maps, Nº de avaliações, Status, Anotação e Mensagem (mais "Excluído por" só quando há excluídos). Cabeçalho em destaque, largura de coluna ajustada, primeira linha congelada, filtro ligado, cor na letra da nota (A verde, B amarelo, C cinza), impressão em paisagem com o cabeçalho repetido. Todo texto é gravado como texto puro, nunca como fórmula. O link `wa.me` (com a mensagem já preenchida) só existe para telefone que parece celular, e o site só vira link se for `http` ou `https`.
 
 Segurança do servidor local, porque uma página qualquer da internet pode tentar falar com `127.0.0.1`:
 
@@ -195,12 +208,12 @@ Segurança do servidor local, porque uma página qualquer da internet pode tenta
 
 ## Painel
 
-O painel é uma página estática (`index.html`, `app.js`, `estilo.css`) sem framework e sem build. Ela só conversa com a API da seção anterior. A referência visual é o preview já aprovado na direção (prata e grafite, minimalista, tema claro e escuro); o refinamento do design fica pra depois, sem mexer na API.
+O painel é uma página estática (`index.html`, `estilo.css` e alguns arquivos `.js` pequenos) sem framework e sem build. Ela só conversa com a API da seção anterior. A referência visual é o preview já aprovado na direção (prata e grafite, minimalista, tema claro e escuro); o refinamento do design fica pra depois, sem mexer na API.
 
 | Tela | O que faz | Dados |
 | --- | --- | --- |
-| Buscar | Escolhe tipos de negócio (sugeridos pelo perfil), UF e cidade, cobertura da cidade e tamanho da busca (rápida, média, ampla), extras de e-mail e redes. Mostra progresso | `POST /api/buscas`, `GET /api/buscas/{id}` |
-| Leads | Tabela com nota A, B, C, filtros, busca por texto, status e exportação. Ao abrir um lead: motivos da nota, mensagem editada na hora, botões de copiar e abrir WhatsApp | `GET /api/leads`, `PATCH /api/leads/{id}`, `GET /api/exportar` |
+| Buscar | Escolhe o tipo de negócio (sugerido pelo perfil), UF e cidade, tamanho da busca e o extra de e-mail. Um controle só pro tamanho: a cobertura é fixa em 10 km ao redor do centro da cidade. Mostra progresso | `POST /api/buscas`, `GET /api/buscas/{id}` |
+| Leads | Tabela com nota A, B, C, filtros, busca por texto, status e exportação. Ao abrir um lead: motivos da nota, mensagem editada na hora, botões de copiar e abrir WhatsApp | `GET /api/leads`, `PATCH /api/leads/{id}`, `GET /api/exportar` (CSV e .xlsx) |
 | Minha oferta | Edita o perfil: oferta, tom, regras e pesos, exclusões e os modelos de mensagem. Salvar recalcula as notas | `GET` e `PUT /api/perfil`, `POST /api/leads/reavaliar` |
 
 Comportamentos que valem desde a v1:
@@ -260,7 +273,7 @@ Regras fixas pro Claude Code durante toda a construção:
 | 4. Entrevista e instalação | `perguntas.md`, `CLAUDE.md`, `AGENTS.md`, skill, `modelos.py`, prompt de instalação com instalação automática do que falta e pausar e retomar | Instalação do zero numa pasta limpa, no Windows, com o Claude Code, sem ajuda manual, inclusive num computador sem Python nem Docker |
 | 5. Pacote e testes de perfil | `.zip`, `iniciar.bat` e `iniciar.sh`, guias, os três perfis de teste, teste no Codex | Todos os critérios de aprovação do documento da entrevista cumpridos |
 
-Depois da fase 5, fora do escopo da v1: refino do design do painel, motor como programa direto (sem Docker, ver `fase0-verificacao-motor.md`), exportação `.xlsx` e uma segunda versão do kit.
+Depois da fase 5, fora do escopo da v1: refino do design do painel, motor como programa direto (sem Docker, ver `fase0-verificacao-motor.md`) e uma segunda versão do kit.
 
 ## Testes e critérios de pronto
 

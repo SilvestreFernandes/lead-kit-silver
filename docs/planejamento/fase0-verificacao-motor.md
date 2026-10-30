@@ -62,6 +62,27 @@ Conclusões:
 - Por isso a profundidade sozinha não serve para diferenciar busca rápida, média e ampla. Mais resultados provavelmente pedem outra alavanca (várias palavras-chave, ou várias coordenadas em grade, como o kit de referência faz), e isso ainda não foi testado.
 - Os tempos acima valem para uma busca de uma palavra-chave. O `max_time` de 900 s foi folga de medição, não valor recomendado: nenhuma busca chegou perto.
 
+## Medição da grade de pontos (fase 3, 2026-10-30)
+
+`restaurantes em Brasília DF`, centro `-15.7939869`, `-47.8828` (Nominatim). Rápida: 1 ponto, raio 10000 m, `depth` 1. Média: 5 pontos (centro, norte, sul, leste e oeste, os quatro a 5000 m do centro), raio 5000 m cada, `depth` 3, `max_time` 300 s. Um job por ponto, em sequência, com pausa de 15 s entre eles. Os dados da medição foram apagados.
+
+| Busca | Linhas | Negócios únicos | Tempo |
+| --- | --- | --- | --- |
+| Rápida (1 ponto) | 16 | 16 | 40 s |
+| Média, ponto 1 (centro) | 20 | 20 | 50 s |
+| Média, ponto 2 (norte) | 20 | 20 | 50 s |
+| Média, ponto 3 (sul) | 20 | 20 | 60 s |
+| Média, ponto 4 (leste) | 20 | 20 | 50 s |
+| Média, ponto 5 (oeste) | 20 | 20 | 50 s |
+
+- Os 5 pontos somam 100 linhas, mas só **65 negócios únicos**. Os outros 35 são repetidos entre pontos vizinhos, então a junção por `place_id` é obrigatória.
+- Todos os 16 negócios da rápida aparecem na união da média. A média trouxe **49 negócios novos** em relação à rápida (65 contra 16, cerca de 4 vezes mais).
+- Cada ponto trouxe de 7 a 13 negócios que nenhum outro ponto trouxe. Por isso a grade rende: o teto de cerca de 20 é por ponto, e pontos diferentes enxergam negócios diferentes.
+- Tempo total da média: cerca de 261 s de busca mais 60 s de pausa, ou seja, uns 5 a 6 minutos. Nenhum ponto falhou e o status sempre foi `ok`.
+- Medido em uma cidade e uma categoria só. O espaçamento de 5 km foi o primeiro valor tentado, não foi comparado com outros.
+- Segunda execução, agora pelo código do kit (`python kit/buscar.py --tamanho media`), mesma busca em Brasília: 5 pontos, 4 pausas de 15 s, **88 negócios únicos**, todos gravados e ligados à busca. Mesma busca, resultados diferentes entre as duas execuções (65 e 88): o Google Maps não devolve a mesma lista sempre. Vale contar com "bem mais que a rápida", e não com um número exato.
+- A busca ampla (mais pontos) **não foi medida** e fica como "em breve" no painel.
+
 ## Colunas reais do CSV (36)
 
 `input_id, link, title, category, address, open_hours, popular_times, website, phone, plus_code, review_count, review_rating, reviews_per_rating, latitude, longitude, cid, status, descriptions, reviews_link, thumbnail, timezone, price_range, data_id, street_view_url, place_id, images, reservations, order_online, menu, owner, complete_address, credit_cards_accepted, about, user_reviews, user_reviews_extended, emails`

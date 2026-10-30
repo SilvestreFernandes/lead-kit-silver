@@ -6,7 +6,7 @@ from pathlib import Path
 from kit import banco, buscar
 from kit import motor as m
 from kit.geocodificar import ErroGeocodificacao
-from testes.fixtures import GeoDeMentira, MotorDeMentira, csv_texto, perfil_ficticio
+from testes.fixtures import GeoDeMentira, MotorDeMentira, csv_texto, linha, perfil_ficticio
 
 
 class TestBuscar(unittest.TestCase):
@@ -155,6 +155,107 @@ class TestBuscar(unittest.TestCase):
         self.assertEqual(self.args().uf, "DF")
         with self.assertRaises(SystemExit):
             self.args("--tamanho", "gigante")
+
+
+def csv_do_ponto(*numeros):
+    """CSV fictício com os negócios de números dados (o mesmo número é o mesmo negócio)."""
+    return csv_texto([linha(n, title=f"Negócio {n}", phone="(61) 3333-%04d" % n) for n in numeros])
+
+
+class TestBuscaMedia(unittest.TestCase):
+    """Busca média: 5 pontos, um job por ponto, pausa entre eles e junção sem repetir."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._tmp.cleanup)
+        self.banco = str(Path(self._tmp.name) / "leads.db")
+        self.conn = banco.abrir(self.banco)
+        self.addCleanup(self.conn.close)
+        self.pausas, self.etapas = [], []
+        # pontos vizinhos repetem negócios: 1..4, 3..6, 5..8, 7..10, 9..12 (12 únicos, 20 linhas)
+        self.csvs = [csv_do_ponto(*range(a, a + 4)) for a in (1, 3, 5, 7, 9)]
+
+    def rodar(self, motor, tamanho="media"):
+        bid = buscar.iniciar_busca(self.conn, "padaria", "Cidade Teste", "DF", tamanho, False)
+        resultado = None
+        try:
+            resultado = buscar.executar_busca(
+                self.conn, bid, perfil_ficticio(), motor, GeoDeMentira(),
+                lambda etapa, seg=None: self.etapas.append(etapa), dormir=self.pausas.append)
+        finally:
+            self.busca_id = bid
+        return resultado
+
+    def test_cinco_jobs_com_centro_e_quatro_pontos_ao_redor(self):
+        motor = MotorDeMentira(csv=self.csvs)
+        self.rodar(motor)
+        self.assertEqual(len(motor.pedidos), 5)
+        self.assertEqual([p["radius"] for p in motor.pedidos], [5000] * 5)
+        self.assertEqual({p["depth"] for p in motor.pedidos}, {3})
+        self.assertEqual({p["max_time"] for p in motor.pedidos}, {300})
+        self.assertEqual({p["keywords"][0] for p in motor.pedidos}, {"padaria em Cidade Teste DF"})
+        centro = (motor.pedidos[0]["lat"], motor.pedidos[0]["lon"])
+        self.assertEqual(centro, ("-15.65", "-47.79"))
+        self.assertEqual(len({(p["lat"], p["lon"]) for p in motor.pedidos}), 5)  # pontos diferentes
+
+    def test_pausa_de_15_segundos_entre_os_pontos(self):
+        self.rodar(MotorDeMentira(csv=self.csvs))
+        self.assertEqual(self.pausas, [15, 15, 15, 15])  # 5 pontos, 4 pausas, nenhuma antes do primeiro
+
+    def test_junta_sem_repetir(self):
+        resultado = self.rodar(MotorDeMentira(csv=self.csvs))
+        self.assertEqual(len(resultado["achados"]), 12)
+        self.assertEqual(len(banco.todos_os_leads(self.conn)), 12)
+        busca = banco.obter_busca(self.conn, self.busca_id)
+        self.assertEqual((busca["status"], busca["total_leads"]), ("ok", 12))
+        self.assertEqual(len(busca["parametros"]["pedidos"]), 5)
+        self.assertEqual(busca["job_id"], "job1,job2,job3,job4,job5")
+
+    def test_todos_os_negocios_ficam_ligados_a_busca(self):
+        self.rodar(MotorDeMentira(csv=self.csvs))
+        self.assertEqual(len(banco.ids_da_busca(self.conn, self.busca_id)), 12)
+
+    def test_progresso_diz_em_que_ponto_esta(self):
+        self.rodar(MotorDeMentira(csv=self.csvs))
+        self.assertIn("Esperando o motor (ponto 1 de 5)", self.etapas)
+        self.assertIn("Esperando o motor (ponto 5 de 5)", self.etapas)
+        self.assertIn("Pausa entre os pontos (ponto 2 de 5)", self.etapas)
+
+    def test_rapida_continua_sendo_um_job_sem_pausa_e_sem_texto_de_ponto(self):
+        motor = MotorDeMentira()
+        self.rodar(motor, "rapida")
+        self.assertEqual((len(motor.pedidos), self.pausas), (1, []))
+        self.assertEqual(motor.pedidos[0]["radius"], 10000)
+        self.assertEqual(motor.pedidos[0]["depth"], 1)
+        self.assertNotIn("ponto", " ".join(self.etapas))
+
+    def test_falha_no_meio_guarda_o_que_ja_veio_e_avisa_onde_parou(self):
+        motor = MotorDeMentira(csv=self.csvs, falha_a_partir_do_job=(3, m.ErroMotor("sem resposta")))
+        with self.assertRaises(m.ErroMotor) as e:
+            self.rodar(motor)
+        self.assertIn("ponto 3 de 5", str(e.exception))
+        self.assertIn("6 negócios", str(e.exception))   # pontos 1 e 2: 1..6
+        self.assertIn("sem resposta", str(e.exception))
+        busca = banco.obter_busca(self.conn, self.busca_id)
+        self.assertEqual((busca["status"], busca["total_leads"]), ("erro", 6))
+        self.assertIn("ponto 3 de 5", busca["erro"])
+        leads = banco.todos_os_leads(self.conn)
+        self.assertEqual(len(leads), 6)
+        self.assertTrue(all(l["letra"] for l in leads))  # as notas dos salvos foram calculadas
+        self.assertEqual(len(motor.pedidos), 3)          # não tentou os pontos 4 e 5
+
+    def test_falha_no_primeiro_ponto_nao_inventa_resultado_parcial(self):
+        motor = MotorDeMentira(csv=self.csvs, falha_a_partir_do_job=(1, m.ErroMotor("fora do ar")))
+        with self.assertRaises(m.ErroMotor) as e:
+            self.rodar(motor)
+        self.assertEqual(str(e.exception), "fora do ar")
+        self.assertEqual(banco.todos_os_leads(self.conn), [])
+
+    def test_ampla_ainda_nao_existe(self):
+        self.assertNotIn("ampla", m.TAMANHOS)
+        self.assertEqual(m.TAMANHOS_EM_BREVE, ("ampla",))
+        with self.assertRaises(SystemExit):
+            buscar.ler_argumentos(["--categoria", "x", "--cidade", "y", "--uf", "DF", "--tamanho", "ampla"])
 
 
 if __name__ == "__main__":

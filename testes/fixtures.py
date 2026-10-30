@@ -82,10 +82,12 @@ def perfil_ficticio():
 class MotorDeMentira:
     """Motor falso. `montar_pedido` e do motor de verdade; o resto nao abre rede."""
 
-    def __init__(self, csv=None, ligado=True, falha=None, segurar=None):
+    def __init__(self, csv=None, ligado=True, falha=None, segurar=None, falha_a_partir_do_job=None):
+        """`csv` pode ser um texto (todo job devolve ele) ou uma lista (job N devolve o N-esimo)."""
         from kit import motor as motor_mod
         self._real = motor_mod.Motor("http://127.0.0.1:8080", dormir=lambda s: None)
         self.csv = csv if csv is not None else csv_texto()
+        self.falha_a_partir_do_job = falha_a_partir_do_job
         self.ligado, self.falha, self.segurar = ligado, falha, segurar
         self.pedidos = []
 
@@ -97,18 +99,23 @@ class MotorDeMentira:
 
     def criar_job(self, pedido):
         self.pedidos.append(pedido)
-        return "job1"
+        return f"job{len(self.pedidos)}"
 
     def esperar(self, job_id, intervalo=5, limite=None, ao_esperar=None):
         if ao_esperar:
             ao_esperar(5)
         if self.segurar is not None:  # deixa o teste olhar a busca "no meio"
             self.segurar.wait(10)
+        numero = int(job_id.removeprefix("job"))
+        if self.falha_a_partir_do_job and numero >= self.falha_a_partir_do_job[0]:
+            raise self.falha_a_partir_do_job[1]
         if self.falha:
             raise self.falha
         return "ok"
 
     def baixar_csv(self, job_id):
+        if isinstance(self.csv, list):
+            return self.csv[min(int(job_id.removeprefix("job")), len(self.csv)) - 1]
         return self.csv
 
 

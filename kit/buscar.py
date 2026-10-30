@@ -5,16 +5,18 @@ Uso no terminal (com o motor ligado por `docker compose up -d`):
 """
 import argparse
 import sys
+import time
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
-from kit import banco, limpeza, motor as motor_mod, pontuacao, validar_perfil  # noqa: E402
+from kit import banco, grade, limpeza, motor as motor_mod, pontuacao, validar_perfil  # noqa: E402
 from kit.geocodificar import ErroGeocodificacao, Geocodificador  # noqa: E402
 
 DADOS = RAIZ / "dados"
+PAUSA_ENTRE_PONTOS_S = 15  # medido assim na fase 3; evita bater no Google em sequencia
 ERROS_ESPERADOS = (motor_mod.ErroMotor, limpeza.ErroCSV, ErroGeocodificacao)
 
 
@@ -24,9 +26,18 @@ def iniciar_busca(conn, categoria, cidade, uf, tamanho, email):
     return banco.criar_busca(conn, categoria, cidade, uf, tamanho, parametros, email)
 
 
-def executar_busca(conn, busca_id, perfil, motor, geo, progresso=None):
-    """Roda a busca inteira. Em erro esperado, marca a busca como 'erro' e repete a excecao.
+def _pontuar_banco(conn, perfil, email):
+    """Avalia o banco inteiro: "possivel rede" depende dos leads de todas as buscas."""
+    avaliados = pontuacao.avaliar_todos(banco.todos_os_leads(conn), perfil, email)
+    banco.gravar_notas(conn, {r["lead"]["chave"]: r for r in avaliados})
+    return avaliados
 
+
+def executar_busca(conn, busca_id, perfil, motor, geo, progresso=None, dormir=time.sleep):
+    """Roda a busca inteira, ponto por ponto. Em erro, marca a busca como 'erro' e repete a excecao.
+
+    Cada ponto da grade vira um job no motor, com PAUSA_ENTRE_PONTOS_S entre eles. Os leads de cada
+    ponto sao salvos assim que chegam, entao uma falha no meio nao perde o que ja veio.
     `conn` precisa ser da thread que chama. `progresso(etapa, segundos=None)` e opcional.
     Devolve {'achados': [...], 'ignoradas': n, 'avaliados': [...]} (avaliados: o banco todo).
     """
@@ -36,32 +47,54 @@ def executar_busca(conn, busca_id, perfil, motor, geo, progresso=None):
 
     busca = banco.obter_busca(conn, busca_id)
     email = busca["email_ligado"]
+    achados, ignoradas, avaliados = {}, 0, []
     try:
         banco.atualizar_busca(conn, busca_id, status="working")
         avisar("Achando a cidade no mapa")
         lat, lon = geo.buscar(busca["cidade"], busca["uf"])
+        pontos = grade.pontos_da_grade(lat, lon, motor_mod.TAMANHOS[busca["tamanho"]]["pontos"])
         palavra = f"{busca['categoria']} em {busca['cidade']} {busca['uf']}"
-        pedido = motor.montar_pedido(palavra, lat, lon, busca["tamanho"], email)
-        banco.atualizar_busca(conn, busca_id, parametros={**busca["parametros"], "pedido": pedido})
-        avisar("Enviando a busca ao motor")
-        job = motor.criar_job(pedido)
-        banco.atualizar_busca(conn, busca_id, job_id=job)
-        motor.esperar(job, ao_esperar=lambda s: avisar("Esperando o motor", s))
-        avisar("Lendo os resultados")
-        achados, ignoradas = limpeza.ler_csv(motor.baixar_csv(job))
-        banco.salvar_leads(conn, busca_id, achados, busca["cidade"], busca["uf"], email)
+        pedidos, jobs = [], []
+        for i, ponto in enumerate(pontos, start=1):
+            sufixo = f" (ponto {i} de {len(pontos)})" if len(pontos) > 1 else ""
+            try:
+                if i > 1:
+                    avisar("Pausa entre os pontos" + sufixo)
+                    dormir(PAUSA_ENTRE_PONTOS_S)
+                pedido = motor.montar_pedido(palavra, ponto["lat"], ponto["lon"], busca["tamanho"], email,
+                                             raio=ponto["raio_m"])
+                pedidos.append(pedido)
+                avisar("Enviando a busca ao motor" + sufixo)
+                job = motor.criar_job(pedido)
+                jobs.append(job)
+                banco.atualizar_busca(conn, busca_id, job_id=",".join(jobs),
+                                      parametros={**busca["parametros"], "pedidos": pedidos})
+                motor.esperar(job, ao_esperar=lambda s, suf=sufixo: avisar("Esperando o motor" + suf, s))
+                avisar("Lendo os resultados" + sufixo)
+                do_ponto, ignoradas_ponto = limpeza.ler_csv(motor.baixar_csv(job))
+            except ERROS_ESPERADOS as e:
+                if not achados:
+                    raise
+                # Ja ha leads salvos de pontos anteriores: avisa onde parou e ainda calcula as notas.
+                _pontuar_banco(conn, perfil, email)
+                raise motor_mod.ErroMotor(
+                    f"A busca parou no ponto {i} de {len(pontos)}. Os {len(achados)} negócios dos pontos "
+                    f"anteriores foram salvos. Motivo: {e}")
+            ignoradas += ignoradas_ponto
+            for lead in do_ponto:
+                achados.setdefault(lead["chave"], lead)
+            banco.salvar_leads(conn, busca_id, do_ponto, busca["cidade"], busca["uf"], email)
         avisar("Calculando as notas")
-        # Avalia o banco inteiro: "possivel rede" depende dos leads de todas as buscas.
-        avaliados = pontuacao.avaliar_todos(banco.todos_os_leads(conn), perfil, email)
-        banco.gravar_notas(conn, {r["lead"]["chave"]: r for r in avaliados})
+        avaliados = _pontuar_banco(conn, perfil, email)
         banco.atualizar_busca(conn, busca_id, status="ok", total_leads=len(achados))
     except ERROS_ESPERADOS as e:
-        banco.atualizar_busca(conn, busca_id, status="erro", erro=str(e))
+        banco.atualizar_busca(conn, busca_id, status="erro", erro=str(e), total_leads=len(achados))
         raise
     except Exception as e:
-        banco.atualizar_busca(conn, busca_id, status="erro", erro="Erro inesperado: " + str(e))
+        banco.atualizar_busca(conn, busca_id, status="erro", erro="Erro inesperado: " + str(e),
+                              total_leads=len(achados))
         raise
-    return {"achados": achados, "ignoradas": ignoradas, "avaliados": avaliados}
+    return {"achados": list(achados.values()), "ignoradas": ignoradas, "avaliados": avaliados}
 
 
 def _tabela(resultados, saida, limite):
@@ -95,10 +128,12 @@ def executar(args, motor, geo, saida=print):
         busca_id = iniciar_busca(conn, args.categoria, args.cidade, args.uf, args.tamanho, args.email)
 
         def progresso(etapa, segundos=None):
-            if etapa == "Esperando o motor":
-                saida(f"  esperando o motor... {int(segundos)} s")
-            elif etapa == "Enviando a busca ao motor":
-                saida("Busca enviada ao motor. A primeira vez pode demorar. Não feche esta janela.")
+            if etapa.startswith("Esperando o motor"):
+                saida(f"  {etapa.lower()}... {int(segundos)} s")
+            elif etapa.startswith("Enviando a busca"):
+                saida(f"{etapa}. A primeira vez pode demorar. Não feche esta janela.")
+            elif etapa.startswith("Pausa"):
+                saida(f"  {etapa.lower()}...")
 
         try:
             resultado = executar_busca(conn, busca_id, perfil, motor, geo, progresso)

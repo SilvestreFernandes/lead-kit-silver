@@ -735,5 +735,112 @@ class TestEstatico(Base):
         self.assertEqual(self.ler("/").status, 404)
 
 
+
+# ===================================================== etapa 1 da fase 3: xlsx, opcoes e contagem
+
+class TestExportarXlsx(Base):
+    def baixar(self, consulta=""):
+        return self.ler("/api/exportar?formato=xlsx" + consulta)
+
+    def test_devolve_um_xlsx_de_verdade(self):
+        r = self.baixar()
+        self.assertEqual(r.status, 200)
+        self.assertIn("spreadsheetml.sheet", r.cabecalho("Content-Type"))
+        self.assertIn('filename="leads.xlsx"', r.cabecalho("Content-Disposition"))
+        self.assertTrue(r.corpo.startswith(b"PK"))
+        import zipfile
+        z = zipfile.ZipFile(io.BytesIO(r.corpo))
+        self.assertIn("xl/worksheets/sheet1.xml", z.namelist())
+
+    def test_usa_os_mesmos_filtros_da_lista(self):
+        import zipfile
+        import re as _re
+
+        def linhas(consulta):
+            z = zipfile.ZipFile(io.BytesIO(self.baixar(consulta).corpo))
+            return len(_re.findall(r"<row ", z.read("xl/worksheets/sheet1.xml").decode("utf-8"))) - 1
+
+        self.assertEqual(linhas(""), self.ler("/api/leads").json["total"])
+        self.assertEqual(linhas("&letra=A"), 1)
+        self.assertEqual(linhas("&excluidos=todos"), 11)
+
+    def test_formato_invalido_filtro_invalido_e_sem_perfil(self):
+        self.assertEqual(self.ler("/api/exportar?formato=pdf").status, 400)
+        self.assertEqual(self.baixar("&letra=Z").status, 400)
+        (self.dados / "perfil.json").unlink()
+        self.assertEqual(self.baixar().status, 409)
+
+    def test_csv_continua_sendo_o_padrao(self):
+        self.assertTrue(self.ler("/api/exportar").cabecalho("Content-Type").startswith("text/csv"))
+        self.assertTrue(self.ler("/api/exportar?formato=csv").cabecalho("Content-Type").startswith("text/csv"))
+
+
+class TestOpcoes(Base):
+    def test_traz_tudo_que_o_formulario_precisa(self):
+        d = self.ler("/api/opcoes").json
+        ids = [r["id"] for r in d["regras"]]
+        self.assertEqual(ids, list(servidor.validar_perfil.REGRAS["regras"]))
+        self.assertEqual(next(r for r in d["regras"] if r["id"] == "sem_site"),
+                         {"id": "sem_site", "texto": "sem site", "peso_padrao": 3})
+        self.assertIn("franquia", [e["id"] for e in d["exclusoes"]])
+        self.assertEqual(d["marcadores"], ["nome", "cidade", "categoria", "motivo", "meu_nome", "minha_empresa"])
+        self.assertEqual((d["peso_minimo"], d["peso_maximo"]), (0, 5))
+        self.assertEqual(d["cortes_padrao"], {"a": 0.7, "b": 0.4})
+        self.assertEqual(d["status_lead"], ["novo", "contatado", "respondeu", "fechado", "descartado"])
+        self.assertEqual(len(d["ufs"]), 27)
+        self.assertIn("rapida", [t["id"] for t in d["tamanhos"]])
+
+    def test_nao_exige_perfil_nem_token(self):
+        (self.dados / "perfil.json").unlink()
+        self.assertEqual(self.ler("/api/opcoes").status, 200)
+
+    def test_tem_as_mesmas_regras_que_o_validador_aceita(self):
+        d = self.ler("/api/opcoes").json
+        p = perfil_ficticio()
+        p["pontuacao"]["regras"] = [{"id": r["id"], "peso": r["peso_padrao"]} for r in d["regras"]]
+        r = self.escrever("PUT", "/api/perfil", p)
+        self.assertEqual(r.status, 200, r.texto)
+        self.assertEqual(r.json["avisos"], [])
+
+
+class TestContagemPorLetra(Base):
+    def test_lista_traz_a_contagem_por_letra(self):
+        d = self.ler("/api/leads").json
+        self.assertEqual(set(d["contagem_por_letra"]), {"A", "B", "C"})
+        self.assertEqual(sum(d["contagem_por_letra"].values()), d["total"])
+
+    def test_filtrar_por_letra_nao_zera_a_contagem_das_outras(self):
+        todos = self.ler("/api/leads").json["contagem_por_letra"]
+        so_a = self.ler("/api/leads?letra=A").json
+        self.assertEqual(so_a["total"], todos["A"])
+        self.assertEqual(so_a["contagem_por_letra"], todos)
+
+    def test_contagem_respeita_os_outros_filtros(self):
+        d = self.ler("/api/leads?q=pao%20sem").json
+        self.assertEqual(sum(d["contagem_por_letra"].values()), 1)
+        d = self.ler("/api/leads?excluidos=sim").json
+        self.assertEqual(sum(d["contagem_por_letra"].values()), d["total"])
+
+class TestBuscaMediaPelaApi(Base):
+    com_leads = False
+
+    def test_media_roda_pela_api_e_mostra_o_ponto_no_progresso(self):
+        csvs = [csv_texto([linha(n, title=f"Negócio {n}") for n in range(a, a + 4)]) for a in (1, 3, 5, 7, 9)]
+        self.motor.csv = csvs
+        self.srv.dormir = lambda s: None  # sem esperar os 15 s entre pontos
+        r = self.escrever("POST", "/api/buscas", {**CORPO_BUSCA, "tamanho": "media"})
+        self.assertEqual(r.status, 202)
+        d = self.esperar_busca(r.json["id"])
+        self.assertEqual((d["status"], d["total_leads"], d["tamanho"]), ("ok", 12, "media"))
+        self.assertEqual(len(self.motor.pedidos), 5)
+        self.assertEqual(self.ler(f"/api/leads?busca={r.json['id']}&excluidos=todos").json["total"], 12)
+
+    def test_ampla_e_recusada_e_aparece_como_em_breve(self):
+        self.assertEqual(self.escrever("POST", "/api/buscas", {**CORPO_BUSCA, "tamanho": "ampla"}).status, 400)
+        d = self.ler("/api/opcoes").json
+        self.assertEqual(d["tamanhos_em_breve"], ["ampla"])
+        self.assertEqual({t["id"]: t["pontos"] for t in d["tamanhos"]}, {"rapida": 1, "media": 5})
+
+
 if __name__ == "__main__":
     unittest.main()

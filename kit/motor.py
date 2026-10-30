@@ -16,15 +16,16 @@ URL_PADRAO = "http://127.0.0.1:8080"
 ZOOM = 15
 RAIO_METROS = 10000
 
-# PROVISORIO. Apenas depth 1 (rapida) foi medido como padrao: 16 linhas em cerca de 30 s.
-# depth 3 e 5 deram os mesmos 20 negocios em 50 s na medicao da fase 1, entao a profundidade
-# sozinha nao diferencia media de ampla. Os valores de media e ampla ficam aqui, num lugar so,
-# ate o Silvestre decidir a alavanca (ver fase0-verificacao-motor.md). Os max_time sao folga.
+# Tamanhos da busca. Cada ponto da grade vira um job (o motor entrega cerca de 20 negocios por ponto).
+# Rapida: 1 ponto, depth 1, medido em Sobradinho e Brasilia (16 negocios, 40 s).
+# Media: 5 pontos com depth 3, medido em Brasilia: 65 negocios unicos (100 linhas, 35 repetidas) em
+# cerca de 5 minutos. Ver docs/planejamento/fase0-verificacao-motor.md. O max_time e a folga por job.
+# Ampla (mais pontos) nao foi medida: aparece como "em breve" e nao existe em TAMANHOS.
 TAMANHOS = {
-    "rapida": {"depth": 1, "max_time": 180},
-    "media": {"depth": 3, "max_time": 300},
-    "ampla": {"depth": 5, "max_time": 600},
+    "rapida": {"pontos": 1, "depth": 1, "max_time": 180},
+    "media": {"pontos": 5, "depth": 3, "max_time": 300},
 }
+TAMANHOS_EM_BREVE = ("ampla",)
 
 STATUS_PRONTO = "ok"
 STATUS_TRABALHANDO = "working"
@@ -73,13 +74,13 @@ class Motor:
         except ErroMotor:
             return False
 
-    def montar_pedido(self, palavra, lat, lon, tamanho="rapida", email=False, nome="lead-kit"):
+    def montar_pedido(self, palavra, lat, lon, tamanho="rapida", email=False, nome="lead-kit", raio=None):
         if tamanho not in TAMANHOS:
             raise ErroMotor("Tamanho de busca desconhecido: " + tamanho)
         t = TAMANHOS[tamanho]
         return {
             "name": nome, "keywords": [palavra], "lang": "pt", "zoom": ZOOM,
-            "lat": str(lat), "lon": str(lon), "fast_mode": False, "radius": RAIO_METROS,
+            "lat": str(lat), "lon": str(lon), "fast_mode": False, "radius": raio or RAIO_METROS,
             "depth": t["depth"], "email": bool(email), "max_time": t["max_time"],
         }
 

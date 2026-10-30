@@ -5,8 +5,9 @@ os leads do banco. Assim mudar o perfil muda o resultado sem precisar regravar n
 """
 import csv
 import io
+from urllib.parse import quote
 
-from kit import banco, modelos, pontuacao
+from kit import banco, modelos, pontuacao, xlsx
 from kit.limpeza import normalizar_nome
 
 FILTROS_EXCLUIDOS = ("nao", "sim", "todos")
@@ -78,6 +79,13 @@ def filtrar(avaliados, filtros, ids_da_busca=None):
     return saida
 
 
+def contar_por_letra(avaliados):
+    contagem = {letra: 0 for letra in LETRAS}
+    for r in avaliados:
+        contagem[r["letra"]] += 1
+    return contagem
+
+
 def resumo(r):
     l = r["lead"]
     return {
@@ -118,18 +126,28 @@ def proteger(texto):
     return "'" + texto if texto.startswith(PERIGOSOS) else texto
 
 
-def telefone_para_csv(lead):
-    """Telefone brasileiro vira '(DD) NNNNN-NNNN', que nao comeca com '+' e nao vira formula.
+def _telefone_nacional(lead):
+    """'(DD) NNNNN-NNNN' para telefone brasileiro, ou None se nao der pra reformatar com seguranca.
 
     O '+55' ja foi tirado dos digitos na limpeza. Numero que comeca com '+' e nao e '+55' (de fora do
-    Brasil) ou que nao tem 10 ou 11 digitos nao e reformatado: vai como veio, so com a protecao.
+    Brasil) ou que nao tem 10 ou 11 digitos nao e reformatado.
     """
     original = (lead["telefone"] or "").strip()
     d = lead["telefone_digitos"]
     estrangeiro = original.startswith("+") and not original.startswith("+55")
     if not estrangeiro and len(d) in (10, 11):
         return f"({d[:2]}) {d[2:-4]}-{d[-4:]}"
-    return proteger(original)
+    return None
+
+
+def telefone_para_csv(lead):
+    """No CSV o telefone nunca comeca com '+': ou e reformatado, ou ganha o apostrofo de protecao."""
+    return _telefone_nacional(lead) or proteger((lead["telefone"] or "").strip())
+
+
+def telefone_para_planilha(lead):
+    """Na planilha .xlsx o texto e gravado como texto puro, entao nao precisa de apostrofo."""
+    return _telefone_nacional(lead) or (lead["telefone"] or "").strip()
 
 
 def exportar_csv(avaliados):
@@ -149,3 +167,74 @@ def exportar_csv(avaliados):
             proteger(l["anotacao"]), proteger(l["mensagem_editada"]), proteger(l["link"]),
         ])
     return "﻿" + saida.getvalue()
+
+
+# ---------- exportacao em .xlsx ----------
+
+LIMITE_LINK_COM_MENSAGEM = 1800
+
+
+def link_whatsapp(lead, mensagem=""):
+    """Link wa.me so para telefone que parece celular (estimativa). A mensagem vai pre-preenchida."""
+    d = lead["telefone_digitos"]
+    if not lead["celular"] or len(d) != 11:
+        return None
+    url = f"https://wa.me/55{d}"
+    if mensagem:
+        com_texto = url + "?text=" + quote(mensagem, safe="")
+        if len(com_texto) <= LIMITE_LINK_COM_MENSAGEM:
+            return com_texto
+    return url
+
+
+def mensagem_para_exportar(r, perfil):
+    """A mensagem editada, se houver; senao a do WhatsApp (ou do primeiro canal com modelo)."""
+    l = r["lead"]
+    if l["mensagem_editada"]:
+        return l["mensagem_editada"]
+    mensagens = modelos.mensagens_do_lead(l, perfil, r["motivo_principal_id"])
+    if "whatsapp" in mensagens:
+        return mensagens["whatsapp"]["texto"]
+    return next(iter(mensagens.values()))["texto"] if mensagens else ""
+
+
+def exportar_xlsx(avaliados, perfil):
+    """Bytes de uma planilha .xlsx pronta para mostrar a um cliente."""
+    mostrar_exclusao = any(r["excluido_por"] for r in avaliados)
+    colunas = [
+        xlsx.Coluna("Negócio", "texto", 38),
+        xlsx.Coluna("Nota", "centro", largura_fixa=8),
+        xlsx.Coluna("Pontos", "inteiro", largura_fixa=9),
+        xlsx.Coluna("Motivos", "quebra", 46),
+    ]
+    if mostrar_exclusao:
+        colunas.append(xlsx.Coluna("Excluído por", "quebra", 30))
+    colunas += [
+        xlsx.Coluna("Categoria", "texto", 24),
+        xlsx.Coluna("Telefone", "texto", 18),
+        xlsx.Coluna("WhatsApp", "texto", largura_fixa=18),
+        xlsx.Coluna("Site", "texto", 34),
+        xlsx.Coluna("Endereço", "quebra", 44),
+        xlsx.Coluna("Avaliação no Maps", "decimal", largura_fixa=12),
+        xlsx.Coluna("Nº de avaliações", "inteiro", largura_fixa=13),
+        xlsx.Coluna("Status", "centro", largura_fixa=13),
+        xlsx.Coluna("Anotação", "quebra", 32),
+        xlsx.Coluna("Mensagem", "quebra", 64),
+    ]
+    linhas = []
+    for r in avaliados:
+        l = r["lead"]
+        mensagem = mensagem_para_exportar(r, perfil)
+        zap = link_whatsapp(l, mensagem)
+        linha = [l["nome"], xlsx.Celula(r["letra"], "nota_" + r["letra"].lower()), r["nota"],
+                 "; ".join(r["motivos"])]
+        if mostrar_exclusao:
+            linha.append(r["excluido_por"] or "")
+        linha += [
+            l["categoria"], telefone_para_planilha(l),
+            xlsx.Celula("Abrir WhatsApp", link=zap) if zap else "",
+            xlsx.Celula(l["site"], link=l["site"]) if l["site"] else "",
+            l["endereco"], l["nota_maps"], l["avaliacoes"], l["status"], l["anotacao"], mensagem,
+        ]
+        linhas.append(linha)
+    return xlsx.gerar(colunas, linhas, nome_aba="Leads", titulo_documento="Lead Kit Silver: leads")

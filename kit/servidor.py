@@ -35,6 +35,7 @@ VERSAO = "0.2.0-dev"
 PORTA_PADRAO = 8787
 ENDERECO = "127.0.0.1"
 LIMITE_CORPO = 1_000_000
+LIMITE_DRENAGEM = 8_000_000  # acima disso nem tenta ler: so responde e fecha
 UFS = ("AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR",
        "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO")
 EXTENSOES_ESTATICAS = {".html", ".js", ".css", ".svg", ".png", ".ico", ".txt"}
@@ -79,6 +80,24 @@ def rota_estado(srv, params, consulta_, corpo):
     }
 
 
+def rota_opcoes(srv, params, consulta_, corpo):
+    """Tudo que o painel precisa para montar formularios, vindo das regras do kit (nada duplicado no JS)."""
+    esquema, regras = validar_perfil.ESQUEMA, validar_perfil.REGRAS
+    return 200, {
+        "regras": [{"id": rid, "texto": cfg["texto"], "peso_padrao": cfg["peso"]}
+                   for rid, cfg in regras["regras"].items()],
+        "exclusoes": [{"id": eid, "texto": cfg["texto"]} for eid, cfg in regras["exclusoes"].items()],
+        "marcadores": esquema["marcadores"],
+        "canais": esquema["canais"], "tons": esquema["tons"], "portes": esquema["portes"],
+        "peso_minimo": esquema["peso_minimo"], "peso_maximo": esquema["peso_maximo"],
+        "tamanhos": [{"id": t, "pontos": cfg["pontos"]} for t, cfg in motor_mod.TAMANHOS.items()],
+        "tamanhos_em_breve": list(motor_mod.TAMANHOS_EM_BREVE),
+        "ufs": list(UFS),
+        "cortes_padrao": regras["cortes"],
+        "status_lead": list(banco.STATUS_LEAD),
+    }
+
+
 def _perfil_valido(srv):
     perfil, erros, avisos = validar_perfil.carregar(srv.caminho_perfil)
     if erros:
@@ -118,23 +137,29 @@ def _paginacao(consulta_):
     return limite, deslocamento
 
 
-def _leads_filtrados(srv, conn, consulta_):
+def _leads_filtrados(srv, conn, consulta_, com_contagem=False):
     perfil = _perfil_valido(srv)
     try:
         filtros = consulta.ler_filtros(consulta_)
     except consulta.FiltroInvalido as e:
         raise Erro(400, str(e))
     ids = banco.ids_da_busca(conn, filtros["busca"]) if filtros["busca"] is not None else None
-    return perfil, consulta.filtrar(consulta.avaliar(conn, perfil), filtros, ids)
+    avaliados = consulta.avaliar(conn, perfil)
+    achados = consulta.filtrar(avaliados, filtros, ids)
+    if com_contagem:
+        # Contagem por letra com todos os filtros menos o da letra, para os botoes A, B e C.
+        sem_letra = consulta.filtrar(avaliados, {**filtros, "letras": None}, ids)
+        return perfil, achados, consulta.contar_por_letra(sem_letra)
+    return perfil, achados
 
 
 def rota_leads_listar(srv, params, consulta_, corpo):
     limite, deslocamento = _paginacao(consulta_)
     with srv.banco() as conn:
-        _, achados = _leads_filtrados(srv, conn, consulta_)
+        _, achados, contagem = _leads_filtrados(srv, conn, consulta_, com_contagem=True)
     pagina = achados[deslocamento:deslocamento + limite]
     return 200, {"total": len(achados), "limite": limite, "offset": deslocamento,
-                 "leads": [consulta.resumo(r) for r in pagina]}
+                 "contagem_por_letra": contagem, "leads": [consulta.resumo(r) for r in pagina]}
 
 
 def _id_inteiro(texto):
@@ -242,9 +267,18 @@ def rota_busca_ler(srv, params, consulta_, corpo):
     return 200, _busca_publica(srv, busca)
 
 
+TIPO_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
 def rota_exportar(srv, params, consulta_, corpo):
+    formato = (consulta_.get("formato") or ["csv"])[0]
+    if formato not in ("csv", "xlsx"):
+        raise Erro(400, "O formato precisa ser csv ou xlsx.")
     with srv.banco() as conn:
-        _, achados = _leads_filtrados(srv, conn, consulta_)
+        perfil, achados = _leads_filtrados(srv, conn, consulta_)
+    if formato == "xlsx":
+        return Resposta(200, consulta.exportar_xlsx(achados, perfil), TIPO_XLSX,
+                        {"Content-Disposition": 'attachment; filename="leads.xlsx"'})
     texto = consulta.exportar_csv(achados)
     return Resposta(200, texto.encode("utf-8"), "text/csv; charset=utf-8",
                     {"Content-Disposition": 'attachment; filename="leads.csv"'})
@@ -253,6 +287,7 @@ def rota_exportar(srv, params, consulta_, corpo):
 # metodo, caminho, funcao, escreve?
 ROTAS = [
     ("GET", r"/api/estado", rota_estado, False),
+    ("GET", r"/api/opcoes", rota_opcoes, False),
     ("GET", r"/api/perfil", rota_perfil_ler, False),
     ("PUT", r"/api/perfil", rota_perfil_gravar, True),
     ("GET", r"/api/leads", rota_leads_listar, False),
@@ -308,6 +343,19 @@ class Manipulador(BaseHTTPRequestHandler):
             return
         if 0 < tamanho <= LIMITE_CORPO:
             self.rfile.read(tamanho)
+        elif LIMITE_CORPO < tamanho <= LIMITE_DRENAGEM:
+            # Corpo grande demais: le e joga fora (sem guardar), com tempo curto, para o cliente
+            # conseguir ler o 413. Fechar a conexao com dados pendentes pode derrubar a resposta.
+            self.connection.settimeout(0.5)
+            restante = tamanho
+            try:
+                while restante > 0:
+                    pedaco = self.rfile.read(min(65536, restante))
+                    if not pedaco:
+                        break
+                    restante -= len(pedaco)
+            except OSError:
+                pass
 
     def _resolver(self, metodo):
         srv = self.server
@@ -393,7 +441,7 @@ class Servidor(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, porta=PORTA_PADRAO, pasta_dados=None, pasta_painel=None, motor=None, geo=None,
-                 token=None, endereco=ENDERECO):
+                 token=None, endereco=ENDERECO, dormir=time.sleep):
         if endereco != ENDERECO:
             raise ValueError("O servidor só pode escutar em 127.0.0.1.")
         super().__init__((endereco, porta), Manipulador)
@@ -407,6 +455,7 @@ class Servidor(ThreadingHTTPServer):
         self.pasta_painel = Path(pasta_painel) if pasta_painel else RAIZ / "kit" / "painel"
         self.motor = motor or motor_mod.Motor()
         self.geo = geo or Geocodificador(arquivo_cache=pasta_dados / "cache_geocodificacao.json")
+        self.dormir = dormir
         self.trava_busca = threading.Lock()
         self.busca_ativa = None
         self.progresso = {}
@@ -426,7 +475,7 @@ class Servidor(ThreadingHTTPServer):
 
         conn = banco.abrir(self.caminho_banco)
         try:
-            buscar.executar_busca(conn, busca_id, perfil, self.motor, self.geo, progresso)
+            buscar.executar_busca(conn, busca_id, perfil, self.motor, self.geo, progresso, self.dormir)
         except Exception as e:
             # executar_busca ja marcou a busca como 'erro' no banco.
             print(f"Busca {busca_id} terminou com erro: {e}", file=sys.stderr)

@@ -1,0 +1,670 @@
+<title>Lead Kit Silver</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: painel local em uma coluna central. Cabeçalho com marca e estado do motor, três abas (Buscar, Leads, Minha oferta),
+   tabela de leads com gaveta lateral de abordagem. Minimalista, tons de grafite e prata, cor só pra qualidade e estado. */
+:root {
+  color-scheme: light;
+  --bg: #F2F3F5;
+  --surface: #FFFFFF;
+  --surface-2: #E9EBEE;
+  --line: #D9DCE1;
+  --fg: #12151A;
+  --muted: #5B6370;
+  --accent: #14181F;
+  --accent-ink: #FFFFFF;
+  --focus: #3B6FE0;
+  --good: #176B45;
+  --good-bg: #E1F2E8;
+  --warn: #8A5200;
+  --warn-bg: #FAEBD0;
+  --neutral: #4A515D;
+  --neutral-bg: #E6E8EC;
+  --shadow: 0 1px 2px rgba(18, 21, 26, 0.06), 0 10px 28px -14px rgba(18, 21, 26, 0.2);
+  --font-ui: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0D1014; --surface: #14181E; --surface-2: #1B2027; --line: #262D36; --fg: #E8EBEF; --muted: #97A0AC;
+    --accent: #E8EBEF; --accent-ink: #0D1014; --focus: #7BA2FF;
+    --good: #6AD6A0; --good-bg: #12301F; --warn: #F0B95C; --warn-bg: #392A10; --neutral: #A6AEB9; --neutral-bg: #222831;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 32px -14px rgba(0, 0, 0, 0.7);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0D1014; --surface: #14181E; --surface-2: #1B2027; --line: #262D36; --fg: #E8EBEF; --muted: #97A0AC;
+  --accent: #E8EBEF; --accent-ink: #0D1014; --focus: #7BA2FF;
+  --good: #6AD6A0; --good-bg: #12301F; --warn: #F0B95C; --warn-bg: #392A10; --neutral: #A6AEB9; --neutral-bg: #222831;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 32px -14px rgba(0, 0, 0, 0.7);
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-ui); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); background: var(--surface); z-index: 60; }
+h1, h2, h3, p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.wrap {
+  max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* aviso de prévia */
+.demo { background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.demo .wrap { padding-block: 8px; }
+.demo b { color: var(--fg); font-weight: 600; }
+
+/* cabeçalho */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 12px; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mark {
+  flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+  background: linear-gradient(135deg, #fbfcfd 0%, #b4bcc8 38%, #eef1f5 55%, #8d96a3 100%);
+  border: 1px solid rgba(0, 0, 0, 0.2); font: 600 12px var(--font-mono); color: #1b2028; letter-spacing: -0.04em;
+}
+.brand b { font-weight: 700; letter-spacing: -0.01em; }
+.brand small { display: block; color: var(--muted); font-size: 12px; line-height: 1.2; }
+.engine { display: inline-flex; align-items: center; gap: 8px; font: 500 12px var(--font-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px var(--good-bg); }
+
+.tabs { display: flex; gap: 4px; }
+.tabs .wrap { display: flex; gap: 4px; padding-block: 0; overflow-x: auto; }
+.tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; padding: 12px 14px; cursor: pointer;
+  color: var(--muted); font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;
+}
+.tab:hover { color: var(--fg); }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+.count { font: 500 11px var(--font-mono); background: var(--surface-2); color: var(--muted); border-radius: 999px; padding: 2px 8px; }
+
+main { padding-block: 32px 72px; }
+.page-head { margin-bottom: 24px; }
+.page-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.page-head p { color: var(--muted); margin-top: 6px; max-width: 62ch; }
+
+/* buscar */
+.search-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.form { display: grid; gap: 0; }
+.field { padding: 22px 24px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; min-width: 0; }
+.field:last-child { border-bottom: 0; }
+.label { font-weight: 600; font-size: 14px; }
+.hint { color: var(--muted); font-size: 13px; }
+.input, .select {
+  width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; min-height: 44px;
+}
+.input:hover, .select:hover { border-color: var(--muted); }
+.row2 { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 13px; cursor: pointer; font-size: 13px; color: var(--muted);
+}
+.chip:hover { color: var(--fg); border-color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label {
+  border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; cursor: pointer; display: grid; gap: 2px; background: var(--bg);
+}
+.seg label b { font-weight: 600; }
+.seg label span { color: var(--muted); font-size: 12px; font-family: var(--font-mono); }
+.seg input:checked + label { border-color: var(--accent); background: var(--surface); box-shadow: inset 0 0 0 1px var(--accent); }
+.seg input:focus-visible + label { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.check { display: grid; grid-template-columns: 20px 1fr; gap: 12px; align-items: start; cursor: pointer; }
+.check input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--accent); }
+.check b { font-weight: 500; display: block; }
+.check span { color: var(--muted); font-size: 13px; }
+
+.summary { padding: 22px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 128px); display: grid; gap: 16px; }
+.summary h2 { font-size: 15px; font-weight: 700; }
+.summary dl { margin: 0; display: grid; gap: 10px; }
+.summary dt { color: var(--muted); font-size: 12px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; }
+.summary dd { margin: 2px 0 0; font-weight: 500; overflow-wrap: anywhere; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 600; font-size: 14px;
+}
+.btn:hover { border-color: var(--muted); }
+.btn-primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn-primary:hover { filter: brightness(1.15); border-color: var(--accent); }
+.btn-block { width: 100%; }
+.care { font-size: 12.5px; color: var(--muted); line-height: 1.5; border-top: 1px solid var(--line); padding-top: 14px; }
+
+.progress { padding: 28px 24px; display: grid; gap: 18px; }
+.progress h2 { font-size: 18px; font-weight: 700; }
+.bar { height: 6px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.4s ease; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.steps li { display: grid; grid-template-columns: 20px 1fr; gap: 10px; color: var(--muted); font-size: 14px; }
+.steps li::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); margin-top: 6px; }
+.steps li.on { color: var(--fg); }
+.steps li.on::before { border-color: var(--accent); background: var(--accent); }
+
+/* leads */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--muted);
+  display: inline-flex; gap: 8px; align-items: center;
+}
+.pill:hover { color: var(--fg); }
+.pill[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.pill em { font: 500 11px var(--font-mono); font-style: normal; opacity: 0.7; }
+.sep { width: 1px; height: 20px; background: var(--line); margin-inline: 4px; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 820px; }
+th { text-align: left; font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); padding: 12px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: 14px; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+.name b { display: block; font-weight: 600; }
+.name small { color: var(--muted); font-size: 12px; }
+.num { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tag { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.tag.good { background: var(--good-bg); color: var(--good); }
+.tag.warn { background: var(--warn-bg); color: var(--warn); }
+.tag.neutral { background: var(--neutral-bg); color: var(--neutral); }
+.q { font: 600 12px var(--font-mono); width: 26px; height: 26px; border-radius: 8px; display: inline-grid; place-items: center; }
+.q.A { background: var(--good-bg); color: var(--good); }
+.q.B { background: var(--warn-bg); color: var(--warn); }
+.q.C { background: var(--neutral-bg); color: var(--neutral); }
+.legend { margin-top: 14px; color: var(--muted); font-size: 12.5px; max-width: 80ch; }
+
+/* gaveta */
+.scrim { position: fixed; inset: 0; background: rgba(8, 10, 14, 0.5); z-index: 70; }
+.drawer {
+  position: fixed; z-index: 80; top: 0; right: 0; bottom: 0; width: min(480px, 100%); background: var(--surface); border-left: 1px solid var(--line);
+  box-shadow: var(--shadow); overflow-y: auto;
+  padding: calc(22px + env(safe-area-inset-top, 0px)) max(22px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) 22px;
+  display: grid; gap: 20px; align-content: start;
+}
+.dr-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.dr-head h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.dr-head p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.x { flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 18px; line-height: 1; }
+.x:hover { border-color: var(--muted); }
+.dr-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.sect h3 { font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 10px; }
+.why { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
+.why li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; }
+.why li::before { content: "+"; font-family: var(--font-mono); color: var(--good); }
+.why li.no::before { content: "\2212"; color: var(--muted); }
+textarea.msg { width: 100%; min-height: 190px; resize: vertical; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px; line-height: 1.55; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.note { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+/* minha oferta */
+.offer-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.preview-msg { padding: 22px; display: grid; gap: 12px; }
+.preview-msg p { white-space: pre-wrap; line-height: 1.6; font-size: 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+
+.toast {
+  position: fixed; z-index: 100; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  background: var(--accent); color: var(--accent-ink); padding: 11px 18px; border-radius: 10px; font-size: 14px; font-weight: 500; max-width: calc(100% - 32px); text-align: center;
+}
+
+@media (max-width: 880px) {
+  .search-grid, .offer-grid { grid-template-columns: 1fr; }
+  .summary { position: static; }
+  .engine span.txt-long { display: none; }
+}
+@media (max-width: 560px) {
+  .row2 { grid-template-columns: 1fr; }
+  .seg { grid-template-columns: 1fr; }
+  .brand small { display: none; }
+  main { padding-block: 24px 64px; }
+  .field { padding: 18px 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+<div class="demo"><div class="wrap"><b>Prévia visual.</b> Os negócios, notas e telefones abaixo são exemplos fictícios. Nada é buscado de verdade e nada é enviado.</div></div>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">LK</div>
+      <div><b>Lead Kit Silver</b><small>Prospecção local com IA</small></div>
+    </div>
+    <div class="engine" title="O motor de busca roda só no seu computador"><span class="dot" aria-hidden="true"></span><span>Motor local <span class="txt-long">ligado</span> · 8080</span></div>
+  </div>
+  <nav class="tabs" aria-label="Seções">
+    <div class="wrap" role="tablist">
+      <button class="tab" role="tab" id="t-buscar" aria-controls="p-buscar" aria-selected="true">Buscar</button>
+      <button class="tab" role="tab" id="t-leads" aria-controls="p-leads" aria-selected="false">Leads <span class="count" id="lead-count">12</span></button>
+      <button class="tab" role="tab" id="t-oferta" aria-controls="p-oferta" aria-selected="false">Minha oferta</button>
+    </div>
+  </nav>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <!-- BUSCAR -->
+    <section id="p-buscar" role="tabpanel" aria-labelledby="t-buscar">
+      <div class="page-head">
+        <h1>Buscar leads</h1>
+        <p>Escolha o tipo de negócio e a cidade. O painel busca no Google Maps, procura contatos e já classifica cada lead.</p>
+      </div>
+      <div class="search-grid">
+        <div class="card" id="search-card">
+          <div class="progress" id="progress" hidden></div>
+          <form class="form" id="search-form" novalidate>
+            <div class="field">
+              <label class="label" for="biz">Tipo de negócio</label>
+              <input class="input" id="biz" type="text" value="clínicas de estética" autocomplete="off">
+              <div class="chips" id="biz-chips" aria-label="Sugestões">
+                <button type="button" class="chip" aria-pressed="false">dentistas</button>
+                <button type="button" class="chip" aria-pressed="false">advogados</button>
+                <button type="button" class="chip" aria-pressed="false">salões de beleza</button>
+                <button type="button" class="chip" aria-pressed="false">academias</button>
+                <button type="button" class="chip" aria-pressed="false">restaurantes</button>
+                <button type="button" class="chip" aria-pressed="false">oficinas mecânicas</button>
+              </div>
+            </div>
+            <div class="field">
+              <span class="label">Onde</span>
+              <div class="row2">
+                <div>
+                  <label class="hint" for="uf">Estado</label>
+                  <select class="select" id="uf"></select>
+                </div>
+                <div>
+                  <label class="hint" for="city">Cidade</label>
+                  <input class="input" id="city" type="text" value="Brasília" autocomplete="off">
+                </div>
+              </div>
+              <label class="check">
+                <input type="checkbox" id="grid">
+                <div><b>Cobrir a cidade inteira</b><span>Divide o mapa em partes para passar do limite de cerca de 120 resultados por busca. Mais lento.</span></div>
+              </label>
+            </div>
+            <div class="field">
+              <span class="label">Tamanho da busca</span>
+              <div class="seg" role="radiogroup" aria-label="Tamanho da busca">
+                <input type="radio" name="depth" id="d1" value="rapida"><label for="d1"><b>Rápida</b><span>~3 a 5 min</span></label>
+                <input type="radio" name="depth" id="d2" value="media" checked><label for="d2"><b>Média</b><span>~5 a 10 min</span></label>
+                <input type="radio" name="depth" id="d3" value="ampla"><label for="d3"><b>Ampla</b><span>~10 a 20 min</span></label>
+              </div>
+              <p class="hint">Tempos estimados. Comece pela rápida: buscas grandes demais podem bloquear seu IP no Google por um tempo.</p>
+            </div>
+            <div class="field">
+              <span class="label">Contatos extras</span>
+              <label class="check"><input type="checkbox" id="opt-mail" checked><div><b>Procurar e-mails nos sites</b><span>Visita o site de cada negócio. Só aparece e-mail que a empresa publicou.</span></div></label>
+              <label class="check"><input type="checkbox" id="opt-soc" checked><div><b>Procurar Instagram, Facebook e LinkedIn</b><span>Pega os links que o site do negócio mostra. Quem não tem site não tem rede encontrada.</span></div></label>
+            </div>
+          </form>
+        </div>
+
+        <aside class="card summary" aria-label="Resumo da busca">
+          <h2>Resumo</h2>
+          <dl>
+            <div><dt>Busca</dt><dd id="s-biz">clínicas de estética</dd></div>
+            <div><dt>Local</dt><dd id="s-loc">Brasília, DF</dd></div>
+            <div><dt>Tamanho</dt><dd id="s-depth">Média, ~5 a 10 min</dd></div>
+            <div><dt>Extras</dt><dd id="s-extra">E-mails e redes sociais</dd></div>
+          </dl>
+          <button class="btn btn-primary btn-block" id="go" type="button">Buscar leads</button>
+          <p class="care">Os dados do Google Maps são públicos, mas telefone e e-mail são dados pessoais. Chame cada lead com uma mensagem personalizada, respeite quem pedir pra parar e não faça disparo em massa. Isso protege seu número no WhatsApp e cumpre a LGPD.</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- LEADS -->
+    <section id="p-leads" role="tabpanel" aria-labelledby="t-leads" hidden>
+      <div class="page-head">
+        <h1 id="leads-title">Leads</h1>
+        <p id="leads-sub">12 negócios encontrados, já classificados. Clique em um lead pra ver o motivo da nota e a mensagem pronta.</p>
+      </div>
+      <div class="toolbar">
+        <div class="filters" id="filters">
+          <button class="pill" data-q="all" aria-pressed="true">Todos <em id="n-all">12</em></button>
+          <button class="pill" data-q="A" aria-pressed="false">A <em id="n-A">4</em></button>
+          <button class="pill" data-q="B" aria-pressed="false">B <em id="n-B">5</em></button>
+          <button class="pill" data-q="C" aria-pressed="false">C <em id="n-C">3</em></button>
+          <span class="sep" aria-hidden="true"></span>
+          <button class="pill" id="f-site" aria-pressed="false">Sem site</button>
+          <button class="pill" id="f-mob" aria-pressed="false">Com celular</button>
+        </div>
+        <div class="actions">
+          <button class="btn" id="ex-csv" type="button">Exportar planilha</button>
+          <button class="btn" id="ex-num" type="button">Copiar números</button>
+        </div>
+      </div>
+      <div class="card tablewrap">
+        <table>
+          <thead><tr><th>Negócio</th><th>Nota</th><th>Site</th><th>WhatsApp</th><th>Qualidade</th><th>Foco sugerido</th><th>Status</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="legend">Como a qualidade é calculada: pontos por não ter site (ou usar só o Instagram), nota alta no Google, volume de avaliações e telefone celular. O Google Maps não diz se o número é WhatsApp. O painel marca como celular os números com 9 dígitos, e mesmo assim vale confirmar antes de contar com ele.</p>
+    </section>
+
+    <!-- MINHA OFERTA -->
+    <section id="p-oferta" role="tabpanel" aria-labelledby="t-oferta" hidden>
+      <div class="page-head">
+        <h1>Minha oferta</h1>
+        <p>Conte o que você vende e como prefere falar. As mensagens sugeridas usam isso.</p>
+      </div>
+      <div class="offer-grid">
+        <div class="card form">
+          <div class="field">
+            <label class="label" for="o-name">Seu nome</label>
+            <input class="input" id="o-name" type="text" value="Silvestre" autocomplete="off">
+          </div>
+          <div class="field">
+            <label class="label" for="o-co">Sua empresa (opcional)</label>
+            <input class="input" id="o-co" type="text" value="BrandForge" autocomplete="off">
+          </div>
+          <div class="field">
+            <span class="label">O que você oferece</span>
+            <div class="chips" id="o-services"></div>
+          </div>
+          <div class="field">
+            <label class="label" for="o-tone">Tom das mensagens</label>
+            <select class="select" id="o-tone">
+              <option value="amigavel" selected>Amigável</option>
+              <option value="direto">Direto</option>
+              <option value="formal">Formal</option>
+            </select>
+          </div>
+        </div>
+        <div class="card preview-msg">
+          <h2 style="font-size:15px;font-weight:700">Exemplo de mensagem</h2>
+          <p id="o-preview"></p>
+          <span class="note">A mensagem sempre inclui um jeito de a pessoa pedir pra não receber mais contato.</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-title" hidden>
+  <div class="dr-head">
+    <div><h2 id="dr-title"></h2><p id="dr-meta"></p></div>
+    <button class="x" id="dr-close" type="button" aria-label="Fechar">&times;</button>
+  </div>
+  <div class="dr-tags" id="dr-tags"></div>
+  <div class="sect"><h3>Por que essa nota</h3><ul class="why" id="dr-why"></ul></div>
+  <div class="sect">
+    <h3>Mensagem sugerida</h3>
+    <label class="hint" for="dr-msg" style="display:block;margin-bottom:8px">Edite à vontade antes de enviar.</label>
+    <textarea class="msg" id="dr-msg"></textarea>
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" id="dr-copy" type="button">Copiar mensagem</button>
+    <button class="btn" id="dr-wa" type="button">Abrir no WhatsApp</button>
+  </div>
+  <div class="field" style="padding:0;border:0">
+    <label class="label" for="dr-status">Status do lead</label>
+    <select class="select" id="dr-status">
+      <option>Novo</option><option>Contatado</option><option>Respondeu</option><option>Fechado</option><option>Descartado</option>
+    </select>
+  </div>
+  <p class="note">Revise antes de enviar e mande uma mensagem por vez, só pra quem faz sentido contatar.</p>
+</aside>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function () {
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+
+  var UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+  var DEPTH = {
+    rapida: { n: 'Rápida', t: '~3 a 5 min' },
+    media:  { n: 'Média',  t: '~5 a 10 min' },
+    ampla:  { n: 'Ampla',  t: '~10 a 20 min' }
+  };
+  var SERVICES = [
+    { k: 'site',   label: 'Sites',                  phrase: 'sites' },
+    { k: 'landing',label: 'Landing pages',          phrase: 'landing pages' },
+    { k: 'auto',   label: 'Automação de WhatsApp',  phrase: 'automação de atendimento' },
+    { k: 'social', label: 'Google Meu Negócio',     phrase: 'presença no Google' },
+    { k: 'trafego',label: 'Tráfego pago',           phrase: 'tráfego pago' }
+  ];
+  var FOCO = { site: 'Site novo', landing: 'Landing page', auto: 'Automação de WhatsApp', melhorar: 'Redesenho do site' };
+
+  /* exemplos fictícios; telefones mascarados de propósito */
+  var LEADS = [
+    { id: 1,  n: 'Clínica Lumière Estética', b: 'Asa Sul',      r: 4.8, rv: 126, site: 'none', ph: '(61) 9XXXX-0412', mob: true,  ig: true  },
+    { id: 2,  n: 'Espaço Vita Beleza',       b: 'Asa Norte',    r: 4.6, rv: 73,  site: 'ig',   ph: '(61) 9XXXX-0987', mob: true,  ig: true  },
+    { id: 3,  n: 'Bella Forma Estética',     b: 'Sudoeste',     r: 4.9, rv: 212, site: 'yes',  ph: '(61) 9XXXX-1530', mob: true,  ig: true  },
+    { id: 4,  n: 'Studio Aura Skin',         b: 'Lago Norte',   r: 4.7, rv: 48,  site: 'none', ph: '(61) 9XXXX-2275', mob: true,  ig: false },
+    { id: 5,  n: 'Clínica Renove',           b: 'Águas Claras', r: 4.3, rv: 31,  site: 'ig',   ph: '(61) 9XXXX-3341', mob: true,  ig: true  },
+    { id: 6,  n: 'Instituto Pele Viva',      b: 'Taguatinga',   r: 4.5, rv: 89,  site: 'none', ph: '(61) 3XXX-4410',  mob: false, ig: false },
+    { id: 7,  n: 'Estética Íris',            b: 'Guará',        r: 3.9, rv: 12,  site: 'none', ph: '(61) 9XXXX-5026', mob: true,  ig: false },
+    { id: 8,  n: 'Casa Ayla Estética',       b: 'Asa Sul',      r: 4.8, rv: 340, site: 'yes',  ph: '(61) 3XXX-6188',  mob: false, ig: true  },
+    { id: 9,  n: 'Clínica Vértice',          b: 'Noroeste',     r: 4.4, rv: 57,  site: 'yes',  ph: '(61) 9XXXX-7093', mob: true,  ig: false },
+    { id: 10, n: 'Studio Nuance',            b: 'Asa Norte',    r: 4.0, rv: 9,   site: 'ig',   ph: '(61) 3XXX-8254',  mob: false, ig: true  },
+    { id: 11, n: 'Espaço Equilíbrio',        b: 'Sudoeste',     r: 4.1, rv: 22,  site: 'yes',  ph: '(61) 3XXX-9317',  mob: false, ig: false },
+    { id: 12, n: 'Clínica Sol Nascente',     b: 'Ceilândia',    r: 4.6, rv: 64,  site: 'none', ph: '(61) 9XXXX-9902', mob: true,  ig: true  }
+  ];
+  LEADS.forEach(function (l) {
+    var s = (l.site === 'none' ? 3 : l.site === 'ig' ? 2 : 0) + (l.r >= 4.5 ? 2 : l.r >= 4 ? 1 : 0) + (l.rv >= 50 ? 1 : 0) + (l.mob ? 2 : 0);
+    l.score = s;
+    l.q = s >= 7 ? 'A' : s >= 4 ? 'B' : 'C';
+    l.foco = l.site === 'none' ? 'site' : l.site === 'ig' ? 'landing' : (l.mob ? 'auto' : 'melhorar');
+  });
+
+  var state = {
+    filter: 'all', onlyNoSite: false, onlyMobile: false, open: null, status: {},
+    offer: { name: 'Silvestre', co: 'BrandForge', tone: 'amigavel', services: { site: true, auto: true } },
+    city: 'Brasília', uf: 'DF', biz: 'clínicas de estética', msgs: {}
+  };
+  var lastFocus = null;
+
+  function fmtRating(r) { return String(r.toFixed(1)).replace('.', ','); }
+  function joinList(a) { return a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' e ' + a[a.length - 1]; }
+  function servPhrase() {
+    var a = SERVICES.filter(function (s) { return state.offer.services[s.k]; }).map(function (s) { return s.phrase; });
+    return a.length ? joinList(a) : 'presença digital';
+  }
+  function who() { return (state.offer.name || 'seu nome') + (state.offer.co ? ', da ' + state.offer.co : ''); }
+
+  function buildMsg(l) {
+    var obs = l.site === 'none' ? 'ainda não têm um site próprio' : l.site === 'ig' ? 'usam o Instagram no lugar de um site' : 'têm um site que poderia captar mais contatos';
+    var shortObs = l.site === 'none' ? 'não encontrei um site' : l.site === 'ig' ? 'o contato principal é o Instagram' : 'o site tem espaço pra captar mais contatos';
+    var tone = state.offer.tone, rt = fmtRating(l.r);
+    if (tone === 'direto') {
+      return 'Olá! Sou ' + who() + '. A ' + l.n + ' tem nota ' + rt + ' no Google, mas ' + shortObs + '. Trabalho com ' + servPhrase() + ' e tenho uma proposta curta pra vocês. Posso enviar? (Se não quiser receber mensagens, é só me avisar.)';
+    }
+    if (tone === 'formal') {
+      return 'Bom dia! Meu nome é ' + who() + '. Encontrei a ' + l.n + ' no Google Maps, com nota ' + rt + ' e ' + l.rv + ' avaliações, e identifiquei uma oportunidade: vocês ' + obs + '. Atuo com ' + servPhrase() + ' e gostaria de apresentar uma proposta. Poderia me indicar o melhor contato? Caso prefira não receber mensagens, basta avisar.';
+    }
+    return 'Oi, tudo bem? Aqui é o ' + who() + '. Vi a ' + l.n + ' no Google, com nota ' + rt + ' e ' + l.rv + ' avaliações, e reparei que vocês ' + obs + '. Eu ajudo negócios daqui de ' + state.city + ' com ' + servPhrase() + '. Posso te mostrar uma ideia rápida, sem compromisso? Se preferir não receber mensagens, é só me avisar.';
+  }
+
+  /* toast */
+  var toastTimer;
+  function toast(t) {
+    var el = $('#toast'); el.textContent = t; el.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.hidden = true; }, 2600);
+  }
+
+  /* abas */
+  var TABS = ['buscar', 'leads', 'oferta'];
+  function showTab(k) {
+    TABS.forEach(function (t) {
+      var on = t === k;
+      $('#t-' + t).setAttribute('aria-selected', on ? 'true' : 'false');
+      $('#p-' + t).hidden = !on;
+    });
+    window.scrollTo(0, 0);
+  }
+  TABS.forEach(function (t) { $('#t-' + t).addEventListener('click', function () { showTab(t); }); });
+
+  /* buscar */
+  var ufSel = $('#uf');
+  UFS.forEach(function (u) { var o = document.createElement('option'); o.value = u; o.textContent = u; if (u === 'DF') o.selected = true; ufSel.appendChild(o); });
+
+  function updateSummary() {
+    var biz = $('#biz').value.trim() || 'sem tipo definido';
+    var city = $('#city').value.trim() || 'sem cidade';
+    var d = DEPTH[($('input[name="depth"]:checked') || {}).value || 'media'];
+    var ex = [];
+    if ($('#opt-mail').checked) ex.push('e-mails');
+    if ($('#opt-soc').checked) ex.push('redes sociais');
+    $('#s-biz').textContent = biz;
+    $('#s-loc').textContent = city + ', ' + $('#uf').value + ($('#grid').checked ? ' (cidade inteira)' : '');
+    $('#s-depth').textContent = d.n + ', ' + d.t;
+    $('#s-extra').textContent = ex.length ? ex.map(function (x, i) { return i ? x : x.charAt(0).toUpperCase() + x.slice(1); }).join(' e ') : 'Nenhum';
+  }
+  $('#search-form').addEventListener('input', updateSummary);
+  $('#search-form').addEventListener('change', updateSummary);
+  $('#search-form').addEventListener('submit', function (e) { e.preventDefault(); });
+  $$('#biz-chips .chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      $$('#biz-chips .chip').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+      c.setAttribute('aria-pressed', 'true');
+      $('#biz').value = c.textContent; updateSummary();
+    });
+  });
+
+  var running = false;
+  $('#go').addEventListener('click', function () {
+    if (running) return;
+    if (!$('#biz').value.trim() || !$('#city').value.trim()) { toast('Preencha o tipo de negócio e a cidade.'); return; }
+    running = true;
+    state.city = $('#city').value.trim(); state.uf = $('#uf').value; state.biz = $('#biz').value.trim();
+    var form = $('#search-form'), prog = $('#progress');
+    prog.innerHTML = '<h2>Buscando em ' + state.city + ', ' + state.uf + '</h2><div class="bar"><i id="pbar"></i></div>' +
+      '<ol class="steps" id="psteps"><li>Ligando o motor local</li><li>Buscando negócios no Google Maps</li><li>Procurando e-mails e redes nos sites</li><li>Classificando os leads</li></ol>' +
+      '<p class="hint">Na prévia isto leva alguns segundos. Na versão real, depende do tamanho da busca.</p>';
+    form.hidden = true; prog.hidden = false;
+    var steps = $$('#psteps li'), i = 0;
+    function next() {
+      if (i < steps.length) {
+        steps[i].className = 'on'; $('#pbar').style.width = Math.round((i + 1) / steps.length * 100) + '%'; i++;
+        setTimeout(next, 900);
+      } else {
+        setTimeout(function () {
+          prog.hidden = true; form.hidden = false; running = false;
+          renderLeads(); showTab('leads'); toast('Prévia: 12 leads de exemplo.');
+        }, 500);
+      }
+    }
+    setTimeout(next, 200);
+  });
+
+  /* leads */
+  function siteTag(l) { return l.site === 'none' ? '<span class="tag good">Não tem</span>' : l.site === 'ig' ? '<span class="tag warn">Só Instagram</span>' : '<span class="tag neutral">Tem site</span>'; }
+  function phTag(l) { return l.mob ? '<span class="tag good">Celular</span>' : '<span class="tag neutral">Fixo</span>'; }
+
+  function renderLeads() {
+    var list = LEADS.filter(function (l) {
+      if (state.filter !== 'all' && l.q !== state.filter) return false;
+      if (state.onlyNoSite && l.site === 'yes') return false;
+      if (state.onlyMobile && !l.mob) return false;
+      return true;
+    }).sort(function (a, b) { return b.score - a.score; });
+    var body = $('#rows'); body.innerHTML = '';
+    if (!list.length) {
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:36px">Nenhum lead com esses filtros.</td></tr>';
+    }
+    list.forEach(function (l) {
+      var tr = document.createElement('tr'); tr.tabIndex = 0; tr.dataset.id = l.id;
+      tr.innerHTML = '<td class="name"><b></b><small></small></td><td class="num"></td><td>' + siteTag(l) + '</td><td>' + phTag(l) + '</td><td><span class="q ' + l.q + '"></span></td><td></td><td></td>';
+      tr.children[0].children[0].textContent = l.n;
+      tr.children[0].children[1].textContent = l.b + ' · ' + l.ph;
+      tr.children[1].textContent = fmtRating(l.r) + ' (' + l.rv + ')';
+      tr.children[4].firstChild.textContent = l.q;
+      tr.children[5].textContent = FOCO[l.foco];
+      tr.children[6].textContent = state.status[l.id] || 'Novo';
+      tr.children[6].style.color = 'var(--muted)';
+      body.appendChild(tr);
+    });
+    ['A', 'B', 'C'].forEach(function (q) { $('#n-' + q).textContent = LEADS.filter(function (l) { return l.q === q; }).length; });
+    $('#n-all').textContent = LEADS.length;
+    $('#lead-count').textContent = LEADS.length;
+    $('#leads-title').textContent = 'Leads em ' + state.city + ', ' + state.uf;
+    $('#leads-sub').textContent = LEADS.length + ' negócios de "' + state.biz + '", já classificados. Clique em um lead pra ver o motivo da nota e a mensagem pronta.';
+  }
+  $$('#filters [data-q]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.filter = b.dataset.q;
+      $$('#filters [data-q]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      renderLeads();
+    });
+  });
+  $('#f-site').addEventListener('click', function () { state.onlyNoSite = !state.onlyNoSite; this.setAttribute('aria-pressed', state.onlyNoSite); renderLeads(); });
+  $('#f-mob').addEventListener('click', function () { state.onlyMobile = !state.onlyMobile; this.setAttribute('aria-pressed', state.onlyMobile); renderLeads(); });
+  $('#ex-csv').addEventListener('click', function () { toast('Na versão real, isto baixa a planilha com todos os leads.'); });
+  $('#ex-num').addEventListener('click', function () { toast('Na versão real, isto copia os números dos leads filtrados.'); });
+
+  $('#rows').addEventListener('click', function (e) { var tr = e.target.closest('tr[data-id]'); if (tr) openDrawer(+tr.dataset.id, tr); });
+  $('#rows').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var tr = e.target.closest('tr[data-id]'); if (tr) { e.preventDefault(); openDrawer(+tr.dataset.id, tr); }
+  });
+
+  /* gaveta */
+  function getLead(id) { return LEADS.filter(function (l) { return l.id === id; })[0]; }
+  function openDrawer(id, from) {
+    var l = getLead(id); state.open = id; lastFocus = from || null;
+    $('#dr-title').textContent = l.n;
+    $('#dr-meta').textContent = l.b + ', ' + state.city + ' · ' + l.ph;
+    $('#dr-tags').innerHTML = '<span class="q ' + l.q + '" title="Qualidade ' + l.q + '">' + l.q + '</span>' + siteTag(l) + phTag(l) + '<span class="tag neutral">Foco: ' + FOCO[l.foco] + '</span>';
+    var why = [];
+    why.push([l.site === 'none' ? 'Não tem site no Google Maps' : l.site === 'ig' ? 'Usa o Instagram no lugar de um site' : 'Já tem site, a oportunidade é melhorá-lo', l.site !== 'yes']);
+    why.push(['Nota ' + fmtRating(l.r) + ' com ' + l.rv + ' avaliações' + (l.r >= 4.5 && l.rv >= 50 ? ', boa reputação pra investir' : ''), l.r >= 4 && l.rv >= 20]);
+    why.push([l.mob ? 'Telefone com 9 dígitos, provável WhatsApp' : 'Telefone fixo, WhatsApp incerto', l.mob]);
+    why.push([l.ig ? 'Instagram encontrado no site' : 'Instagram não encontrado no site', l.ig]);
+    $('#dr-why').innerHTML = why.map(function (w) { return '<li' + (w[1] ? '' : ' class="no"') + '>' + w[0] + '</li>'; }).join('');
+    $('#dr-msg').value = state.msgs[id] != null ? state.msgs[id] : buildMsg(l);
+    $('#dr-status').value = state.status[id] || 'Novo';
+    $('#scrim').hidden = false; $('#drawer').hidden = false;
+    $('#dr-close').focus();
+  }
+  function closeDrawer() {
+    $('#scrim').hidden = true; $('#drawer').hidden = true; state.open = null;
+    if (lastFocus) lastFocus.focus();
+  }
+  $('#dr-close').addEventListener('click', closeDrawer);
+  $('#scrim').addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#drawer').hidden) closeDrawer(); });
+  $('#dr-msg').addEventListener('input', function () { if (state.open) state.msgs[state.open] = this.value; });
+  $('#dr-status').addEventListener('change', function () { if (state.open) { state.status[state.open] = this.value; renderLeads(); } });
+  $('#dr-copy').addEventListener('click', function () {
+    var t = $('#dr-msg');
+    function fallback() { t.focus(); t.select(); toast('Selecionei o texto. Use Ctrl+C pra copiar.'); }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t.value).then(function () { toast('Mensagem copiada.'); }, fallback);
+      } else { fallback(); }
+    } catch (err) { fallback(); }
+  });
+  $('#dr-wa').addEventListener('click', function () { toast('Na versão real, abre a conversa no WhatsApp com a mensagem pronta.'); });
+
+  /* minha oferta */
+  var sv = $('#o-services');
+  SERVICES.forEach(function (s) {
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = s.label;
+    b.setAttribute('aria-pressed', state.offer.services[s.k] ? 'true' : 'false');
+    b.addEventListener('click', function () {
+      state.offer.services[s.k] = !state.offer.services[s.k];
+      b.setAttribute('aria-pressed', state.offer.services[s.k] ? 'true' : 'false');
+      state.msgs = {}; renderPreview();
+    });
+    sv.appendChild(b);
+  });
+  function renderPreview() { $('#o-preview').textContent = buildMsg(LEADS[0]); }
+  $('#o-name').addEventListener('input', function () { state.offer.name = this.value.trim(); state.msgs = {}; renderPreview(); });
+  $('#o-co').addEventListener('input', function () { state.offer.co = this.value.trim(); state.msgs = {}; renderPreview(); });
+  $('#o-tone').addEventListener('change', function () { state.offer.tone = this.value; state.msgs = {}; renderPreview(); });
+
+  updateSummary(); renderLeads(); renderPreview();
+})();
+</script>

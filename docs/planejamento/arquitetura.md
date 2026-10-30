@@ -42,13 +42,15 @@ lead-kit-silver/
     perfil.exemplo.json     exemplo preenchido
   kit/
     servidor.py             servidor local e rotas da API
+    testar_api.py           testa a API pelo terminal, só com Python (sem curl)
+    consulta.py             filtros, resumo, detalhe e exportação CSV dos leads
     buscar.py               comando de terminal: faz uma busca e lista leads com nota
     motor.py                cliente do motor (jobs, status, download)
     geocodificar.py         cidade para latitude e longitude (Nominatim)
     limpeza.py              lê o CSV do motor, limpa os campos e tira duplicados
     pontuacao.py            regras e nota A, B, C
     regras.json             tabela de regras e pesos padrão
-    modelos.py              troca dos marcadores nas mensagens
+    modelos.py              troca dos marcadores nas mensagens (adiantado na fase 2, com modelo provisório)
     validar_perfil.py       valida o perfil.json
     banco.py                SQLite dos leads e do status
     painel/
@@ -60,12 +62,15 @@ lead-kit-silver/
     perfis/                 três perfis de teste
     test_banco.py
     test_buscar.py
+    test_consulta.py
     test_geocodificar.py
     test_limpeza.py
+    test_modelos.py
     test_motor.py
     test_pontuacao.py
     test_validacao.py
     test_servidor.py
+    test_testar_api.py
   docs/
     planejamento/           este documento e entrevista-e-perfil.md
     guia-de-uso.md
@@ -176,10 +181,17 @@ Armazenamento em `dados/leads.db` (SQLite):
 
 Segurança do servidor local, porque uma página qualquer da internet pode tentar falar com `127.0.0.1`:
 
-- Aceita só requisições com `Host` igual a `127.0.0.1:8787` ou `localhost:8787`.
-- Gera um token a cada início, entrega só ao painel e exige o token em toda rota que altera algo.
-- Não libera CORS pra nenhuma origem.
+- Aceita só requisições com `Host` igual a `127.0.0.1:<porta>` ou `localhost:<porta>`. Qualquer outro valor, ou a falta do cabeçalho, recebe 403, inclusive em leitura.
+- Gera um token a cada início e o escreve dentro do `index.html` ao servir `/` (marcador `{{TOKEN}}`). Nunca aparece em rota de dados nem em mensagem de erro. Toda rota que altera algo exige o cabeçalho `X-Token` (401 sem ele).
+- Não libera CORS pra nenhuma origem: nenhuma resposta tem cabeçalho `Access-Control-*` e `OPTIONS` é recusado.
+- Recusa `Origin` de outro site, mesmo com token válido.
+- Escrita só com `Content-Type: application/json` (415) e corpo de até 1 MB (413).
+- Só escuta em `127.0.0.1` e não reaproveita porta já ocupada (no Windows isso deixaria outro programa pegar a mesma porta).
+- Só serve arquivos de dentro de `kit/painel/`, com extensões do painel. Tentativas de sair da pasta recebem 404.
 - Não lê nem grava nada fora da pasta do kit.
+- Uma conexão SQLite por thread: cada requisição e a thread da busca abrem e fecham a sua. Só uma busca por vez (409 se houver outra).
+- Na exportação CSV, texto que começa com `=`, `+`, `-`, `@`, tabulação ou retorno ganha um apóstrofo, para a planilha não executar como fórmula. Telefone brasileiro sai como `(DD) NNNNN-NNNN`, sem o `+55`.
+- Lead tem `id` inteiro na API. "Possível rede" e a exclusão são calculadas na hora e nunca gravadas no lead.
 
 ## Painel
 

@@ -75,3 +75,49 @@ def perfil_ficticio():
         "conformidade": {"restricoes": "nao"},
         "mensagens": {"whatsapp": "Oi, {nome}! Notei que {motivo}. Se não fizer sentido, é só avisar que não escrevo mais."},
     }))
+
+
+# ---------- dubles de motor e de geocodificacao (nenhuma rede de verdade) ----------
+
+class MotorDeMentira:
+    """Motor falso. `montar_pedido` e do motor de verdade; o resto nao abre rede."""
+
+    def __init__(self, csv=None, ligado=True, falha=None, segurar=None):
+        from kit import motor as motor_mod
+        self._real = motor_mod.Motor("http://127.0.0.1:8080", dormir=lambda s: None)
+        self.csv = csv if csv is not None else csv_texto()
+        self.ligado, self.falha, self.segurar = ligado, falha, segurar
+        self.pedidos = []
+
+    def montar_pedido(self, *args, **kwargs):
+        return self._real.montar_pedido(*args, **kwargs)
+
+    def no_ar(self):
+        return self.ligado
+
+    def criar_job(self, pedido):
+        self.pedidos.append(pedido)
+        return "job1"
+
+    def esperar(self, job_id, intervalo=5, limite=None, ao_esperar=None):
+        if ao_esperar:
+            ao_esperar(5)
+        if self.segurar is not None:  # deixa o teste olhar a busca "no meio"
+            self.segurar.wait(10)
+        if self.falha:
+            raise self.falha
+        return "ok"
+
+    def baixar_csv(self, job_id):
+        return self.csv
+
+
+class GeoDeMentira:
+    def __init__(self, erro=None):
+        self.erro, self.chamadas = erro, []
+
+    def buscar(self, cidade, uf):
+        self.chamadas.append((cidade, uf))
+        if self.erro:
+            raise self.erro
+        return (-15.65, -47.79)

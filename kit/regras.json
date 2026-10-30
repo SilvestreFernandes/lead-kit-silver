@@ -1,17 +1,18 @@
 {
-  "_aviso": "Pesos e limites padrao sao provisorios. Ajustar depois de testar com leads reais.",
+  "_aviso": "Pesos, limites e frases sao provisorios. Pesos: ajustar depois de testar com leads reais. Frases: cada uma descreve so um fato que o dado do Google Maps comprova, em tom neutro, e o Silvestre revisa o texto.",
   "regras": {
-    "sem_site":          {"peso": 3, "texto": "sem site"},
-    "so_instagram":      {"peso": 2, "texto": "site é só uma rede social"},
-    "nota_alta":         {"peso": 2, "texto": "nota alta", "nota_minima": 4.5, "nota_media": 4.0, "peso_media": 1},
-    "nota_baixa":        {"peso": 2, "texto": "nota com espaço pra melhorar", "nota_maxima": 4.0},
-    "muitas_avaliacoes": {"peso": 1, "texto": "muitas avaliações", "minimo": 50},
-    "poucas_avaliacoes": {"peso": 1, "texto": "poucas avaliações", "maximo": 15},
-    "celular":           {"peso": 2, "texto": "telefone provavelmente é WhatsApp"},
-    "delivery":          {"peso": 1, "texto": "aceita pedido online"},
-    "reserva":           {"peso": 1, "texto": "aceita reserva"},
-    "sem_email":         {"peso": 1, "texto": "nenhum e-mail publicado"}
+    "sem_site":          {"peso": 3, "texto": "sem site", "frase": "não achei um site no perfil do Google Maps"},
+    "so_instagram":      {"peso": 2, "texto": "site é só uma rede social", "frase": "o site do perfil no Google Maps leva a uma rede social"},
+    "nota_alta":         {"peso": 2, "texto": "nota alta", "frase": "a nota no Google Maps é {nota_maps}", "nota_minima": 4.5, "nota_media": 4.0, "peso_media": 1},
+    "nota_baixa":        {"peso": 2, "texto": "nota com espaço pra melhorar", "frase": "a nota no Google Maps é {nota_maps}", "nota_maxima": 4.0},
+    "muitas_avaliacoes": {"peso": 1, "texto": "muitas avaliações", "frase": "o perfil tem {avaliacoes} avaliações no Google Maps", "minimo": 50},
+    "poucas_avaliacoes": {"peso": 1, "texto": "poucas avaliações", "frase": "o perfil tem {avaliacoes} avaliações no Google Maps", "maximo": 15},
+    "celular":           {"peso": 2, "texto": "telefone provavelmente é WhatsApp", "frase": "o telefone do perfil no Google Maps parece ser de celular"},
+    "delivery":          {"peso": 1, "texto": "aceita pedido online", "frase": "o perfil aceita pedido online"},
+    "reserva":           {"peso": 1, "texto": "aceita reserva", "frase": "o perfil aceita reserva"},
+    "sem_email":         {"peso": 1, "texto": "nenhum e-mail publicado", "frase": "não achei e-mail publicado no perfil"}
   },
+  "frase_sem_motivo": "o perfil aparece no Google Maps em {cidade}",
   "exclusoes": {
     "sem_telefone": {"texto": "sem telefone"},
     "nota_muito_baixa": {"texto": "nota muito baixa", "abaixo_de": 3.0},

@@ -50,7 +50,9 @@ Não decida sozinho: texto da licença da camada paga, nome do produto, parcelam
 
 ## Estado do projeto
 
-As fases 0 (verificação do motor em Docker) e 1 (núcleo sem interface) estão concluídas. A próxima é a fase 2 (servidor). Os tamanhos de busca média e ampla em `kit/motor.py` são provisórios até a decisão sobre a alavanca (profundidade sozinha não diferenciou).
+As fases 0 (verificação do motor em Docker) e 1 (núcleo sem interface) estão concluídas. A fase 2 (servidor) está em andamento.
+
+Fato medido do motor: ele entrega cerca de 20 negócios por palavra-chave e por ponto, e a profundidade (`depth`) quase não muda isso (ver `fase0-verificacao-motor.md`). Por isso os tamanhos de busca média e ampla em `kit/motor.py` seguem provisórios e marcados. Serão definidos na fase 3, provavelmente por grade de pontos. Não fixe esses valores antes disso.
 
 ## Dados e privacidade durante o desenvolvimento
 

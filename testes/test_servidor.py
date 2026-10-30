@@ -1,0 +1,739 @@
+"""Testes do servidor local. Servidor de verdade em 127.0.0.1 (porta livre), motor e mapas simulados."""
+import contextlib
+import csv
+import http.client
+import io
+import json
+import shutil
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+
+from kit import banco, limpeza, servidor
+from kit import motor as motor_mod
+from testes.fixtures import (GeoDeMentira, MotorDeMentira, csv_texto, linha, perfil_ficticio)
+
+TOKEN = "token-de-teste-123"
+
+
+class Resp:
+    def __init__(self, status, cabecalhos, corpo):
+        self.status, self.cabecalhos, self.corpo = status, cabecalhos, corpo
+
+    @property
+    def json(self):
+        return json.loads(self.corpo.decode("utf-8"))
+
+    @property
+    def texto(self):
+        return self.corpo.decode("utf-8")
+
+    def cabecalho(self, nome):
+        return self.cabecalhos.get(nome.lower())
+
+
+class Base(unittest.TestCase):
+    """Sobe um servidor por teste, com pasta de dados e painel temporarios."""
+    com_perfil = True
+    com_leads = True
+
+    def setUp(self):
+        # No Windows um arquivo recem-criado pode ficar preso por instantes (antivirus, indexador).
+        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._tmp.cleanup)
+        self.raiz = Path(self._tmp.name)
+        self.dados, self.painel = self.raiz / "dados", self.raiz / "painel"
+        self.dados.mkdir()
+        self.painel.mkdir()
+        (self.painel / "index.html").write_text(
+            '<meta name="token" content="{{TOKEN}}"><p>painel</p>', encoding="utf-8")
+        (self.painel / "app.js").write_text("console.log('ok');", encoding="utf-8")
+        (self.raiz / "segredo.html").write_text("SEGREDO-FORA-DO-PAINEL", encoding="utf-8")
+        (self.raiz / "segredo.js").write_text("SEGREDO-JS", encoding="utf-8")
+        (self.painel / "dados.json").write_text('{"nao":"servir"}', encoding="utf-8")
+        if self.com_perfil:
+            self.gravar_perfil(perfil_ficticio())
+        self.motor, self.geo = MotorDeMentira(), GeoDeMentira()
+        self.iniciar_servidor()
+        if self.com_leads:
+            self.popular_banco()
+
+    def iniciar_servidor(self):
+        self.srv = servidor.Servidor(porta=0, pasta_dados=self.dados, pasta_painel=self.painel,
+                                     motor=self.motor, geo=self.geo, token=TOKEN)
+        self.porta = self.srv.porta
+        threading.Thread(target=self.srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+        self.addCleanup(self.parar_servidor, self.srv)
+
+    @staticmethod
+    def parar_servidor(srv):
+        srv.shutdown()
+        srv.server_close()
+
+    def gravar_perfil(self, perfil):
+        (self.dados / "perfil.json").write_text(json.dumps(perfil), encoding="utf-8")
+
+    def popular_banco(self, linhas=None):
+        conn = banco.abrir(str(self.dados / "leads.db"))
+        bid = banco.criar_busca(conn, "padaria", "Cidade Teste", "DF", "rapida", {}, False)
+        banco.salvar_leads(conn, bid, limpeza.ler_csv(csv_texto(linhas))[0], "Cidade Teste", "DF", False)
+        conn.close()
+        return bid
+
+    def lead_id(self, nome):
+        conn = banco.abrir(str(self.dados / "leads.db"))
+        try:
+            return next(l["id"] for l in banco.todos_os_leads(conn) if l["nome"] == nome)
+        finally:
+            conn.close()
+
+    def pedir(self, metodo, caminho, corpo=None, host="auto", token=None, cabecalhos=None,
+              tipo="application/json", bruto=None, tamanho_declarado=None):
+        """Faz o pedido controlando cada cabecalho. host=None nao manda Host nenhum."""
+        con = http.client.HTTPConnection("127.0.0.1", self.porta, timeout=20)
+        try:
+            con.putrequest(metodo, caminho, skip_host=True, skip_accept_encoding=True)
+            if host == "auto":
+                host = f"127.0.0.1:{self.porta}"
+            if host is not None:
+                con.putheader("Host", host)
+            dados = bruto if bruto is not None else (json.dumps(corpo).encode() if corpo is not None else b"")
+            if token is not None:
+                con.putheader("X-Token", token)
+            if tipo and (dados or tamanho_declarado):
+                con.putheader("Content-Type", tipo)
+            if dados or tamanho_declarado or metodo in ("POST", "PUT", "PATCH"):
+                con.putheader("Content-Length", str(tamanho_declarado if tamanho_declarado is not None else len(dados)))
+            for k, v in (cabecalhos or {}).items():
+                con.putheader(k, v)
+            con.endheaders(dados if tamanho_declarado is None else b"")
+            r = con.getresponse()
+            return Resp(r.status, {k.lower(): v for k, v in r.getheaders()}, r.read())
+        finally:
+            con.close()
+
+    def ler(self, caminho, **kw):
+        return self.pedir("GET", caminho, **kw)
+
+    def escrever(self, metodo, caminho, corpo=None, **kw):
+        kw.setdefault("token", TOKEN)
+        return self.pedir(metodo, caminho, corpo if corpo is not None else {}, **kw)
+
+    def esperar_busca(self, busca_id, limite=10):
+        fim = time.time() + limite
+        while time.time() < fim:
+            d = self.ler(f"/api/buscas/{busca_id}").json
+            if d["status"] in ("ok", "erro"):
+                return d
+            time.sleep(0.05)
+        self.fail("a busca não terminou a tempo")
+
+
+# ===================================================== degrau 1: segurança
+
+ROTAS_DE_LEITURA = ["/api/estado", "/api/perfil", "/api/leads", "/api/leads/1", "/api/buscas",
+                    "/api/buscas/1", "/api/exportar", "/", "/app.js"]
+ROTAS_DE_ESCRITA = [("PUT", "/api/perfil"), ("POST", "/api/buscas"), ("PATCH", "/api/leads/1"),
+                    ("POST", "/api/leads/reavaliar")]
+
+
+class TestSeguranca(Base):
+    def test_host_errado_e_recusado_em_toda_rota_de_leitura(self):
+        for host in ("evil.invalid", "evil.invalid:80", "127.0.0.1:9999", "localhost:9999",
+                     "192.168.0.10", "127.0.0.1", "localhost", "0.0.0.0", "", None):
+            for caminho in ROTAS_DE_LEITURA:
+                with self.subTest(host=host, caminho=caminho):
+                    r = self.ler(caminho, host=host)
+                    self.assertEqual(r.status, 403)
+                    self.assertIn("Endereço não permitido", r.json["erro"])
+
+    def test_host_errado_e_recusado_em_toda_rota_de_escrita_mesmo_com_token(self):
+        for host in ("evil.invalid", f"192.168.0.10:{self.porta}", None):
+            for metodo, caminho in ROTAS_DE_ESCRITA:
+                with self.subTest(host=host, caminho=caminho):
+                    self.assertEqual(self.escrever(metodo, caminho, host=host).status, 403)
+
+    def test_hosts_validos_passam(self):
+        for host in (f"127.0.0.1:{self.porta}", f"localhost:{self.porta}", f"LOCALHOST:{self.porta}"):
+            with self.subTest(host=host):
+                self.assertEqual(self.ler("/api/estado", host=host).status, 200)
+
+    def test_escrita_sem_token_ou_com_token_errado_e_recusada(self):
+        for metodo, caminho in ROTAS_DE_ESCRITA:
+            for token in (None, "", "errado", TOKEN + "x", TOKEN[:-1]):
+                with self.subTest(caminho=caminho, token=token):
+                    r = self.pedir(metodo, caminho, {}, token=token)
+                    self.assertEqual(r.status, 401)
+
+    def test_recusa_de_token_nao_altera_nada(self):
+        antes = (self.dados / "perfil.json").read_text(encoding="utf-8")
+        self.pedir("PUT", "/api/perfil", perfil_ficticio(), token="errado")
+        self.assertEqual((self.dados / "perfil.json").read_text(encoding="utf-8"), antes)
+        self.assertEqual(self.pedir("PATCH", f"/api/leads/{self.lead_id('Pão Sem Site')}",
+                                    {"status": "fechado"}).status, 401)
+        self.assertEqual(self.ler(f"/api/leads/{self.lead_id('Pão Sem Site')}").json["status"], "novo")
+
+    def test_token_certo_deixa_escrever(self):
+        self.assertEqual(self.escrever("POST", "/api/leads/reavaliar").status, 200)
+
+    def test_leitura_nao_exige_token(self):
+        self.assertEqual(self.ler("/api/estado").status, 200)
+
+    def test_nenhuma_resposta_tem_cabecalho_de_cors(self):
+        respostas = [
+            self.ler("/api/estado"), self.ler("/api/nao-existe"), self.ler("/", host="evil.invalid"),
+            self.pedir("POST", "/api/leads/reavaliar", {}), self.pedir("OPTIONS", "/api/estado"),
+            self.escrever("POST", "/api/leads/reavaliar"), self.ler("/app.js"), self.ler("/"),
+            self.pedir("DELETE", "/api/estado"),
+            self.ler("/api/estado", cabecalhos={"Origin": f"http://127.0.0.1:{self.porta}"}),
+        ]
+        for r in respostas:
+            self.assertEqual([k for k in r.cabecalhos if k.startswith("access-control")], [], r.status)
+
+    def test_options_e_recusado_sem_cors(self):
+        r = self.pedir("OPTIONS", "/api/leads/reavaliar", cabecalhos={
+            "Access-Control-Request-Method": "POST"})
+        self.assertEqual(r.status, 405)
+        self.assertNotIn("access-control-allow-origin", r.cabecalhos)
+
+    def test_preflight_de_outro_site_e_recusado(self):
+        r = self.pedir("OPTIONS", "/api/leads/reavaliar", cabecalhos={
+            "Origin": "http://evil.invalid", "Access-Control-Request-Method": "POST"})
+        self.assertEqual(r.status, 403)
+        self.assertNotIn("access-control-allow-origin", r.cabecalhos)
+
+    def test_origin_de_outro_site_e_recusado_mesmo_com_token_e_em_leitura(self):
+        for origem in ("http://evil.invalid", "null", "https://127.0.0.1:%d" % self.porta,
+                       "http://127.0.0.1:1"):
+            with self.subTest(origem=origem):
+                self.assertEqual(self.escrever("POST", "/api/leads/reavaliar",
+                                               cabecalhos={"Origin": origem}).status, 403)
+                self.assertEqual(self.ler("/api/estado", cabecalhos={"Origin": origem}).status, 403)
+
+    def test_origin_do_proprio_servidor_passa(self):
+        for host in ("127.0.0.1", "localhost"):
+            origem = f"http://{host}:{self.porta}"
+            self.assertEqual(self.escrever("POST", "/api/leads/reavaliar",
+                                           cabecalhos={"Origin": origem}).status, 200)
+
+    def test_escrita_so_com_content_type_json(self):
+        for tipo in ("text/plain", "application/x-www-form-urlencoded", "multipart/form-data", None):
+            with self.subTest(tipo=tipo):
+                r = self.pedir("POST", "/api/leads/reavaliar", bruto=b"{}", token=TOKEN, tipo=tipo)
+                self.assertEqual(r.status, 415)
+
+    def test_content_type_json_com_charset_passa(self):
+        r = self.pedir("POST", "/api/leads/reavaliar", {}, token=TOKEN, tipo="application/json; charset=utf-8")
+        self.assertEqual(r.status, 200)
+
+    def test_corpo_grande_demais(self):
+        r = self.pedir("PUT", "/api/perfil", token=TOKEN, tamanho_declarado=2_000_000)
+        self.assertEqual(r.status, 413)
+        r = self.pedir("PUT", "/api/perfil", bruto=b"x" * 1_100_000, token=TOKEN)
+        self.assertEqual(r.status, 413)
+
+    def test_json_quebrado_ou_que_nao_e_objeto(self):
+        for bruto in (b"{quebrado", b"[1,2]", b"\"texto\"", b"\xff\xfe"):
+            with self.subTest(bruto=bruto):
+                self.assertEqual(self.pedir("POST", "/api/buscas", bruto=bruto, token=TOKEN).status, 400)
+
+    def test_token_nunca_aparece_fora_do_index(self):
+        corpos = [self.ler(c).texto for c in ("/api/estado", "/api/perfil", "/api/leads", "/api/buscas",
+                                               "/api/nao-existe", "/app.js")]
+        corpos.append(self.ler("/", host="evil.invalid").texto)
+        corpos.append(self.pedir("POST", "/api/leads/reavaliar", {}, token="errado").texto)
+        corpos.append(json.dumps(self.ler("/api/estado").cabecalhos))
+        for c in corpos:
+            self.assertNotIn(TOKEN, c)
+
+    def test_servidor_so_escuta_em_127_0_0_1(self):
+        self.assertEqual(self.srv.server_address[0], "127.0.0.1")
+        for endereco in ("0.0.0.0", "192.168.0.1", "", "::"):
+            with self.subTest(endereco=endereco), self.assertRaises(ValueError):
+                servidor.Servidor(porta=0, pasta_dados=self.dados, pasta_painel=self.painel,
+                                  endereco=endereco)
+
+    def test_cabecalhos_de_protecao_nas_respostas(self):
+        r = self.ler("/api/estado")
+        self.assertEqual(r.cabecalho("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(r.cabecalho("Cache-Control"), "no-store")
+        self.assertEqual(r.cabecalho("X-Frame-Options"), "DENY")
+        self.assertIn("frame-ancestors 'none'", self.ler("/").cabecalho("Content-Security-Policy"))
+
+    def test_rota_inexistente_e_metodo_errado(self):
+        self.assertEqual(self.ler("/api/nao-existe").status, 404)
+        self.assertEqual(self.pedir("DELETE", "/api/estado").status, 405)
+        self.assertEqual(self.pedir("POST", "/api/estado", {}, token=TOKEN).status, 405)
+        self.assertEqual(self.ler("/api/leads/reavaliar").status, 405)
+        self.assertEqual(self.ler("/api/leads/abc").status, 404)
+
+    def test_erro_interno_nao_vaza_detalhe(self):
+        (self.dados / "perfil.json").unlink()
+        (self.dados / "perfil.json").mkdir()  # ler isso como arquivo vai estourar
+        with contextlib.redirect_stderr(io.StringIO()):
+            r = self.ler("/api/estado")
+        self.assertEqual(r.status, 500)
+        self.assertNotIn("Traceback", r.texto)
+        self.assertNotIn(str(self.dados), r.texto)
+        self.assertIn("Algo deu errado", r.json["erro"])
+
+    def test_varias_requisicoes_ao_mesmo_tempo(self):
+        resultados = []
+
+        def chamar():
+            resultados.append(self.ler("/api/leads").status)
+
+        threads = [threading.Thread(target=chamar) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(resultados, [200] * 8)
+
+
+# ===================================================== degrau 2: estado
+
+class TestEstado(Base):
+    def test_tudo_certo(self):
+        d = self.ler("/api/estado").json
+        self.assertEqual(d["versao_kit"], servidor.VERSAO)
+        self.assertTrue(d["motor_no_ar"])
+        self.assertEqual(d["perfil"], {"existe": True, "valido": True, "erros": [], "avisos": []})
+        self.assertIsNone(d["busca_em_andamento"])
+
+    def test_motor_desligado(self):
+        self.motor.ligado = False
+        self.assertFalse(self.ler("/api/estado").json["motor_no_ar"])
+
+    def test_perfil_invalido_lista_os_problemas(self):
+        p = perfil_ficticio()
+        p["negocio"]["oferta"] = ""
+        self.gravar_perfil(p)
+        d = self.ler("/api/estado").json["perfil"]
+        self.assertEqual((d["existe"], d["valido"]), (True, False))
+        self.assertTrue(any("negocio.oferta" in e for e in d["erros"]))
+
+    def test_perfil_ausente(self):
+        (self.dados / "perfil.json").unlink()
+        d = self.ler("/api/estado").json["perfil"]
+        self.assertEqual((d["existe"], d["valido"]), (False, False))
+
+
+# ===================================================== degrau 3: perfil
+
+class TestPerfil(Base):
+    def test_ler(self):
+        d = self.ler("/api/perfil").json
+        self.assertEqual(d["perfil"]["negocio"]["oferta"], "Sites para negócios locais")
+        self.assertEqual(d["erros"], [])
+
+    def test_ler_sem_perfil(self):
+        (self.dados / "perfil.json").unlink()
+        r = self.ler("/api/perfil")
+        self.assertEqual(r.status, 404)
+        self.assertIn("entrevista", r.json["erro"])
+
+    def test_gravar_invalido_da_422_e_nao_muda_o_arquivo(self):
+        antes = (self.dados / "perfil.json").read_text(encoding="utf-8")
+        p = perfil_ficticio()
+        p["mensagens"]["whatsapp"] = "compre {apelido}"
+        r = self.escrever("PUT", "/api/perfil", p)
+        self.assertEqual(r.status, 422)
+        self.assertTrue(r.json["erros"])
+        self.assertEqual((self.dados / "perfil.json").read_text(encoding="utf-8"), antes)
+        self.assertFalse((self.dados / "perfil.anterior.json").exists())
+
+    def test_gravar_valido_guarda_o_anterior(self):
+        antigo = (self.dados / "perfil.json").read_text(encoding="utf-8")
+        novo = perfil_ficticio()
+        novo["negocio"]["oferta"] = "Contabilidade para pequenos negócios"
+        r = self.escrever("PUT", "/api/perfil", novo)
+        self.assertEqual(r.status, 200)
+        gravado = json.loads((self.dados / "perfil.json").read_text(encoding="utf-8"))
+        self.assertEqual(gravado["negocio"]["oferta"], "Contabilidade para pequenos negócios")
+        self.assertEqual((self.dados / "perfil.anterior.json").read_text(encoding="utf-8"), antigo)
+        self.assertFalse((self.dados / "perfil.json.tmp").exists())
+        self.assertEqual(self.ler("/api/perfil").json["perfil"]["negocio"]["oferta"],
+                         "Contabilidade para pequenos negócios")
+
+    def test_gravar_corrige_peso_e_avisa(self):
+        p = perfil_ficticio()
+        p["pontuacao"]["regras"][0]["peso"] = 9
+        r = self.escrever("PUT", "/api/perfil", p)
+        self.assertEqual(r.status, 200)
+        self.assertTrue(r.json["avisos"])
+        self.assertEqual(r.json["perfil"]["pontuacao"]["regras"][0]["peso"], 5)
+
+    def test_gravar_sem_perfil_anterior_nao_cria_backup(self):
+        (self.dados / "perfil.json").unlink()
+        self.assertEqual(self.escrever("PUT", "/api/perfil", perfil_ficticio()).status, 200)
+        self.assertFalse((self.dados / "perfil.anterior.json").exists())
+
+    def test_gravar_remove_dado_sensivel(self):
+        p = perfil_ficticio()
+        p["negocio"]["cpf"] = "000.000.000-00"
+        self.escrever("PUT", "/api/perfil", p)
+        self.assertNotIn("cpf", (self.dados / "perfil.json").read_text(encoding="utf-8"))
+
+
+# ===================================================== degrau 4: leads
+
+class TestLeads(Base):
+    def listar(self, consulta=""):
+        return self.ler("/api/leads" + consulta).json
+
+    def nomes(self, consulta=""):
+        return [l["nome"] for l in self.listar(consulta)["leads"]]
+
+    def test_padrao_esconde_excluidos_e_ordena_por_nota(self):
+        d = self.listar()
+        self.assertEqual(d["leads"][0]["nome"], "Pão Sem Site")
+        self.assertEqual(d["leads"][0]["letra"], "A")
+        self.assertNotIn("Sem Telefone", self.nomes())
+        self.assertNotIn("Café Rede", self.nomes())
+
+    def test_excluidos_com_o_motivo(self):
+        d = self.listar("?excluidos=sim")
+        motivos = {l["nome"]: l["excluido_por"] for l in d["leads"]}
+        self.assertEqual(motivos["Sem Telefone"], "sem telefone")
+        self.assertIn("possível rede (nome repetido em 3 endereços)", motivos["Café Rede"])
+        self.assertEqual(self.listar("?excluidos=todos")["total"], 11)
+
+    def test_filtros(self):
+        self.assertEqual(self.nomes("?letra=A"), ["Pão Sem Site"])
+        self.assertEqual(self.nomes("?q=pao%20sem"), ["Pão Sem Site"])
+        self.assertEqual(self.nomes("?q=restaurante"), ["Reserva"])
+        self.assertEqual(self.nomes("?status=fechado"), [])
+        self.assertEqual(self.nomes("?busca=999"), [])
+
+    def test_filtro_por_busca(self):
+        self.assertEqual(self.listar("?busca=1")["total"], self.listar()["total"])
+
+    def test_paginacao(self):
+        d = self.listar("?limite=2&offset=1")
+        self.assertEqual((len(d["leads"]), d["total"], d["limite"], d["offset"]), (2, self.listar()["total"], 2, 1))
+
+    def test_filtros_invalidos_dao_400_em_portugues(self):
+        for q in ("?letra=Z", "?status=vendido", "?busca=x", "?excluidos=talvez", "?limite=0",
+                  "?limite=abc", "?limite=5000", "?offset=-1"):
+            with self.subTest(q=q):
+                r = self.ler("/api/leads" + q)
+                self.assertEqual(r.status, 400)
+                self.assertIn("erro", r.json)
+
+    def test_sem_perfil_valido_da_409(self):
+        (self.dados / "perfil.json").unlink()
+        r = self.ler("/api/leads")
+        self.assertEqual(r.status, 409)
+        self.assertIn("perfil", r.json["erro"])
+
+    def test_detalhe_do_lead(self):
+        d = self.ler(f"/api/leads/{self.lead_id('Pão Sem Site')}").json
+        self.assertEqual(d["nome"], "Pão Sem Site")
+        self.assertIn("sem site (+3)", d["motivos"])
+        self.assertEqual(d["frase_do_motivo"], "não achei um site no perfil do Google Maps")
+        msg = d["mensagens"]["whatsapp"]
+        self.assertFalse(msg["padrao"])
+        self.assertIn("Notei que não achei um site no perfil do Google Maps.", msg["texto"])
+        self.assertEqual(d["mensagem_editada"], "")
+
+    def test_detalhe_usa_modelo_provisorio_se_o_perfil_nao_tem(self):
+        p = perfil_ficticio()
+        p["mensagens"] = {}
+        self.gravar_perfil(p)
+        msg = self.ler(f"/api/leads/{self.lead_id('Pão Sem Site')}").json["mensagens"]["whatsapp"]
+        self.assertTrue(msg["padrao"])
+        self.assertIn("não escrevo mais", msg["texto"])
+
+    def test_lead_inexistente(self):
+        self.assertEqual(self.ler("/api/leads/99999").status, 404)
+
+    def test_alterar_status_anotacao_e_mensagem(self):
+        lid = self.lead_id("Pão Sem Site")
+        r = self.escrever("PATCH", f"/api/leads/{lid}", {"status": "contatado", "anotacao": "ligar terça"})
+        self.assertEqual(r.status, 200)
+        self.assertEqual((r.json["status"], r.json["anotacao"]), ("contatado", "ligar terça"))
+        self.escrever("PATCH", f"/api/leads/{lid}", {"mensagem_editada": "Oi, minha versão"})
+        d = self.ler(f"/api/leads/{lid}").json
+        self.assertEqual((d["status"], d["anotacao"], d["mensagem_editada"]),
+                         ("contatado", "ligar terça", "Oi, minha versão"))
+        self.assertEqual(self.nomes("?status=contatado"), ["Pão Sem Site"])
+
+    def test_alterar_com_valor_invalido(self):
+        lid = self.lead_id("Pão Sem Site")
+        for corpo in ({"status": "vendido"}, {"status": 3}, {"anotacao": 5}, {"anotacao": "x" * 2001},
+                      {"mensagem_editada": "x" * 5001}, {"nome": "outro"}, {}, {"status": "novo", "id": 9}):
+            with self.subTest(corpo=str(corpo)[:40]):
+                self.assertEqual(self.escrever("PATCH", f"/api/leads/{lid}", corpo).status, 400)
+
+    def test_alterar_lead_inexistente(self):
+        self.assertEqual(self.escrever("PATCH", "/api/leads/99999", {"status": "novo"}).status, 404)
+
+    def test_possivel_rede_e_recalculada_e_nunca_gravada(self):
+        self.assertIn("Café Rede", [l["nome"] for l in self.listar("?excluidos=sim")["leads"]])
+        # tira um dos tres enderecos do banco: a marca some sozinha, nada ficou gravado
+        conn = banco.abrir(str(self.dados / "leads.db"))
+        conn.execute("DELETE FROM leads_busca WHERE lead_id IN (SELECT id FROM leads WHERE chave='p:pid6c')")
+        conn.execute("DELETE FROM leads WHERE chave='p:pid6c'")
+        conn.commit()
+        colunas = [c[1] for c in conn.execute("PRAGMA table_info(leads)")]
+        conn.close()
+        self.assertFalse([c for c in colunas if "rede" in c or "exclu" in c])
+        excluidos = [l["nome"] for l in self.listar("?excluidos=sim")["leads"]]
+        self.assertNotIn("Café Rede", excluidos)
+        self.assertIn("Café Rede", self.nomes())
+
+    def test_leitura_e_escrita_ao_mesmo_tempo(self):
+        lid = self.lead_id("Pão Sem Site")
+        resultados = []
+
+        def ler():
+            resultados.append(self.ler("/api/leads").status)
+
+        def escrever(i):
+            resultados.append(self.escrever("PATCH", f"/api/leads/{lid}", {"anotacao": f"n{i}"}).status)
+
+        threads = [threading.Thread(target=ler) for _ in range(6)]
+        threads += [threading.Thread(target=escrever, args=(i,)) for i in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(resultados, [200] * 12)
+
+
+# ===================================================== degrau 5: reavaliar
+
+class TestReavaliar(Base):
+    def test_mudar_o_perfil_muda_notas_sem_perder_o_trabalho_do_usuario(self):
+        lid = self.lead_id("Pão Sem Site")
+        self.escrever("PATCH", f"/api/leads/{lid}", {"status": "contatado", "anotacao": "ligar"})
+        antes = self.ler(f"/api/leads/{lid}").json
+        self.assertEqual(antes["letra"], "A")
+        p = perfil_ficticio()
+        p["pontuacao"]["regras"] = [{"id": "nota_baixa", "peso": 5}]
+        self.escrever("PUT", "/api/perfil", p)
+        r = self.escrever("POST", "/api/leads/reavaliar")
+        self.assertEqual(r.status, 200)
+        self.assertEqual(r.json["leads"], 11)
+        self.assertEqual(sum(r.json["por_letra"].values()), 11)
+        depois = self.ler(f"/api/leads/{lid}").json
+        self.assertNotEqual((depois["nota"], depois["letra"]), (antes["nota"], antes["letra"]))
+        self.assertEqual((depois["status"], depois["anotacao"]), ("contatado", "ligar"))
+        conn = banco.abrir(str(self.dados / "leads.db"))
+        gravado = banco.obter_lead(conn, lid)
+        conn.close()
+        self.assertEqual((gravado["nota"], gravado["letra"]), (depois["nota"], depois["letra"]))
+
+    def test_sem_perfil_valido_da_409(self):
+        (self.dados / "perfil.json").unlink()
+        self.assertEqual(self.escrever("POST", "/api/leads/reavaliar").status, 409)
+
+
+# ===================================================== degrau 6: buscas
+
+CORPO_BUSCA = {"categoria": "padaria", "cidade": "Cidade Teste", "uf": "df", "tamanho": "rapida"}
+
+
+class TestBuscas(Base):
+    com_leads = False
+
+    def criar(self, **mudancas):
+        corpo = {**CORPO_BUSCA, **mudancas}
+        return self.escrever("POST", "/api/buscas", {k: v for k, v in corpo.items() if v is not None})
+
+    def test_busca_roda_do_comeco_ao_fim_pela_api(self):
+        r = self.criar()
+        self.assertEqual(r.status, 202)
+        d = self.esperar_busca(r.json["id"])
+        self.assertEqual((d["status"], d["total_leads"], d["uf"]), ("ok", 11, "DF"))
+        self.assertEqual(self.motor.pedidos[0]["keywords"], ["padaria em Cidade Teste DF"])
+        self.assertEqual(self.geo.chamadas, [("Cidade Teste", "DF")])
+        leads = self.ler(f"/api/leads?busca={r.json['id']}").json
+        self.assertEqual(leads["leads"][0]["nome"], "Pão Sem Site")
+        self.assertIsNone(self.ler("/api/estado").json["busca_em_andamento"])
+
+    def test_progresso_aparece_no_meio_da_busca(self):
+        self.motor.segurar = threading.Event()
+        bid = self.criar().json["id"]
+        fim = time.time() + 5
+        d = self.ler(f"/api/buscas/{bid}").json
+        while d["etapa"] != "Esperando o motor" and time.time() < fim:
+            time.sleep(0.02)
+            d = self.ler(f"/api/buscas/{bid}").json
+        self.assertEqual((d["status"], d["etapa"]), ("working", "Esperando o motor"))
+        self.assertEqual(self.ler("/api/estado").json["busca_em_andamento"], bid)
+        self.motor.segurar.set()
+        final = self.esperar_busca(bid)
+        self.assertEqual(final["status"], "ok")
+        self.assertIsNone(final["etapa"])
+
+    def test_so_uma_busca_por_vez(self):
+        self.motor.segurar = threading.Event()
+        primeira = self.criar().json["id"]
+        r = self.criar(categoria="restaurante")
+        self.assertEqual(r.status, 409)
+        self.assertEqual(r.json["busca_em_andamento"], primeira)
+        self.motor.segurar.set()
+        self.esperar_busca(primeira)
+        self.assertEqual(self.criar(categoria="restaurante").status, 202)
+
+    def test_campos_invalidos(self):
+        casos = [dict(categoria=None), dict(categoria="  "), dict(categoria="x" * 81), dict(categoria=5),
+                 dict(cidade=None), dict(uf=None), dict(uf="ZZ"), dict(uf="DFX"), dict(tamanho="gigante"),
+                 dict(email="sim"), dict(cidade="com\nquebra")]
+        for mudancas in casos:
+            with self.subTest(mudancas=str(mudancas)[:40]):
+                self.assertEqual(self.criar(**mudancas).status, 400)
+        self.assertEqual(self.motor.pedidos, [])
+
+    def test_perfil_invalido_da_409_e_nao_cria_busca(self):
+        (self.dados / "perfil.json").unlink()
+        self.assertEqual(self.criar().status, 409)
+        self.assertEqual(self.ler("/api/buscas").json["buscas"], [])
+
+    def test_motor_desligado_da_503(self):
+        self.motor.ligado = False
+        r = self.criar()
+        self.assertEqual(r.status, 503)
+        self.assertIn("docker compose up -d", r.json["erro"])
+
+    def test_erro_do_motor_aparece_na_busca(self):
+        self.motor.falha = motor_mod.ErroMotor("passou do tempo")
+        d = self.esperar_busca(self.criar().json["id"])
+        self.assertEqual((d["status"], d["erro"]), ("erro", "passou do tempo"))
+        self.assertIsNone(self.ler("/api/estado").json["busca_em_andamento"])
+
+    def test_erro_inesperado_tambem_libera_o_servidor(self):
+        self.motor.falha = RuntimeError("quebrou")
+        with contextlib.redirect_stderr(io.StringIO()):
+            d = self.esperar_busca(self.criar().json["id"])
+        self.assertEqual(d["status"], "erro")
+        self.assertEqual(self.criar().status, 202)
+
+    def test_listar_e_ler_buscas(self):
+        a = self.criar().json["id"]
+        self.esperar_busca(a)
+        b = self.criar(categoria="academia").json["id"]
+        self.esperar_busca(b)
+        ids = [x["id"] for x in self.ler("/api/buscas").json["buscas"]]
+        self.assertEqual(ids, [b, a])
+        self.assertEqual(self.ler("/api/buscas/9999").status, 404)
+
+    def test_resposta_da_busca_nao_vaza_o_pedido_interno(self):
+        d = self.esperar_busca(self.criar().json["id"])
+        self.assertNotIn("parametros", d)
+        self.assertNotIn("job_id", d)
+
+    def test_busca_pendurada_de_antes_vira_erro_ao_reiniciar(self):
+        conn = banco.abrir(str(self.dados / "leads.db"))
+        bid = banco.criar_busca(conn, "x", "C", "DF", "rapida", {}, False)
+        banco.atualizar_busca(conn, bid, status="working")
+        conn.close()
+        self.iniciar_servidor()  # novo servidor na mesma pasta, como depois de fechar e abrir o kit
+        d = self.ler(f"/api/buscas/{bid}").json
+        self.assertEqual(d["status"], "erro")
+        self.assertIn("Interrompida", d["erro"])
+
+
+# ===================================================== degrau 7: exportar
+
+class TestExportar(Base):
+    def baixar(self, consulta=""):
+        return self.ler("/api/exportar" + consulta)
+
+    def linhas(self, r):
+        return list(csv.reader(io.StringIO(r.texto.lstrip("﻿"))))
+
+    def test_csv_utf8_com_bom_e_nome_do_arquivo(self):
+        r = self.baixar()
+        self.assertEqual(r.status, 200)
+        self.assertTrue(r.cabecalho("Content-Type").startswith("text/csv"))
+        self.assertIn("attachment", r.cabecalho("Content-Disposition"))
+        self.assertTrue(r.corpo.startswith(b"\xef\xbb\xbf"))
+        self.assertEqual(self.linhas(r)[0][:3], ["Nota", "Pontos", "Negócio"])
+
+    def test_usa_os_mesmos_filtros_da_lista(self):
+        self.assertEqual(len(self.linhas(self.baixar("?letra=A"))), 2)
+        self.assertEqual(len(self.linhas(self.baixar("?excluidos=todos"))), 12)
+        self.assertEqual(len(self.linhas(self.baixar())), 1 + self.ler("/api/leads").json["total"])
+
+    def test_filtro_invalido_da_400(self):
+        self.assertEqual(self.baixar("?letra=Z").status, 400)
+
+    def test_sem_perfil_da_409(self):
+        (self.dados / "perfil.json").unlink()
+        self.assertEqual(self.baixar().status, 409)
+
+    def test_formula_e_telefone_com_mais_saem_protegidos(self):
+        conn = banco.abrir(str(self.dados / "leads.db"))
+        bid = banco.criar_busca(conn, "x", "C", "DF", "rapida", {}, False)
+        perigosos = [
+            linha(50, title="=HYPERLINK(\"http://x.invalid\")", phone="+55 61 98888-0050"),
+            linha(51, title="Estrangeiro", phone="+1 202 555 0151"),
+            linha(52, title="@arroba", phone="(61) 3333-0052"),
+        ]
+        banco.salvar_leads(conn, bid, limpeza.ler_csv(csv_texto(perigosos))[0], "C", "DF", False)
+        conn.close()
+        linhas = {l[2].lstrip("'"): l for l in self.linhas(self.baixar("?excluidos=todos"))[1:]}
+        self.assertEqual(linhas['=HYPERLINK("http://x.invalid")'][2][0], "'")
+        self.assertEqual(linhas['=HYPERLINK("http://x.invalid")'][7], "(61) 98888-0050")
+        self.assertEqual(linhas["Estrangeiro"][7], "'+1 202 555 0151")
+        self.assertEqual(linhas["@arroba"][2], "'@arroba")
+        for l in self.linhas(self.baixar("?excluidos=todos"))[1:]:
+            for celula in (l[2], l[7], l[13], l[16], l[17]):
+                self.assertFalse(celula.startswith(("=", "+", "-", "@", "\t", "\r")), celula)
+
+
+# ===================================================== degrau 8: painel estático
+
+class TestEstatico(Base):
+    def test_index_leva_o_token_do_servidor(self):
+        r = self.ler("/")
+        self.assertEqual(r.status, 200)
+        self.assertTrue(r.cabecalho("Content-Type").startswith("text/html"))
+        self.assertIn(f'content="{TOKEN}"', r.texto)
+        self.assertNotIn("{{TOKEN}}", r.texto)
+        self.assertEqual(self.ler("/index.html").status, 200)
+
+    def test_token_novo_a_cada_inicio(self):
+        outro = servidor.Servidor(porta=0, pasta_dados=self.dados, pasta_painel=self.painel,
+                                  motor=self.motor, geo=self.geo)
+        self.addCleanup(outro.server_close)
+        self.assertNotEqual(outro.token, TOKEN)
+        self.assertGreaterEqual(len(outro.token), 32)
+
+    def test_javascript_e_servido_com_o_tipo_certo(self):
+        r = self.ler("/app.js")
+        self.assertEqual(r.status, 200)
+        self.assertIn("javascript", r.cabecalho("Content-Type"))
+
+    def test_nao_sai_da_pasta_do_painel(self):
+        tentativas = ["/../segredo.html", "/../segredo.js", "/%2e%2e/segredo.html", "/%2e%2e%2fsegredo.js",
+                      "/..%5csegredo.html", "/..\\segredo.html", "/./../segredo.js",
+                      "//..//segredo.html", "/app.js/../../segredo.js", "/..%00/segredo.html"]
+        for caminho in tentativas:
+            with self.subTest(caminho=caminho):
+                r = self.ler(caminho)
+                self.assertEqual(r.status, 404)
+                self.assertNotIn("SEGREDO", r.texto)
+
+    def test_so_serve_extensoes_do_painel(self):
+        self.assertEqual(self.ler("/dados.json").status, 404)
+        self.assertEqual(self.ler("/nao-existe.js").status, 404)
+        self.assertEqual(self.ler("/..").status, 404)
+        self.assertEqual(self.ler("/sub/").status, 404)
+
+    def test_so_get_serve_arquivo(self):
+        self.assertEqual(self.pedir("POST", "/", {}, token=TOKEN).status, 405)
+        self.assertEqual(self.pedir("PUT", "/index.html", {}, token=TOKEN).status, 405)
+
+    def test_pasta_do_painel_vazia_da_404_e_nao_quebra(self):
+        (self.painel / "index.html").unlink()
+        self.assertEqual(self.ler("/").status, 404)
+
+
+if __name__ == "__main__":
+    unittest.main()

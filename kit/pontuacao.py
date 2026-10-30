@@ -65,7 +65,7 @@ def _acerto(regra_id, lead, cfg, peso, email_ligado):
 
 def pontuar(lead, perfil, email_ligado=False):
     """Devolve {nota, letra, motivos, motivo_principal}. Motivos como 'sem site (+3)'."""
-    motivos, pontos = [], []
+    motivos, pontos = [], []  # pontos: (ganho, texto, id da regra)
     # O lead vindo do banco sabe se a busca dele usou a opcao de e-mail; esse valor manda.
     email_ligado = lead.get("email_ligado", email_ligado)
     for regra in perfil["pontuacao"]["regras"]:
@@ -73,12 +73,14 @@ def pontuar(lead, perfil, email_ligado=False):
         ganho = _acerto(regra["id"], lead, cfg, regra["peso"], email_ligado)
         if ganho > 0:
             motivos.append(f"{cfg['texto']} (+{ganho})")
-            pontos.append((ganho, cfg["texto"]))
-    total = sum(p for p, _ in pontos)
+            pontos.append((ganho, cfg["texto"], regra["id"]))
+    total = sum(p[0] for p in pontos)
     corte_a, corte_b = cortes(perfil)
     letra = "A" if total >= corte_a else "B" if total >= corte_b else "C"
-    principal = max(pontos, key=lambda p: p[0])[1] if pontos else ""
-    return {"nota": total, "letra": letra, "motivos": motivos, "motivo_principal": principal}
+    principal = max(pontos, key=lambda p: p[0]) if pontos else None  # empate: a primeira do perfil
+    return {"nota": total, "letra": letra, "motivos": motivos,
+            "motivo_principal": principal[1] if principal else "",
+            "motivo_principal_id": principal[2] if principal else None}
 
 
 def contar_redes(leads):

@@ -3,6 +3,9 @@
 O mesmo negocio achado em buscas diferentes vira um lead so (chave = place_id, cid ou nome+endereco).
 Status, anotacao e mensagem editada sobrevivem a novas buscas. A marcacao de "possivel rede" nao
 fica aqui: e recalculada na hora pelo modulo pontuacao.
+
+Uma conexao por thread: cada requisicao do servidor e a thread da busca chamam abrir() e fecham a
+sua. Nunca compartilhe uma conexao entre threads.
 """
 import json
 import sqlite3
@@ -24,7 +27,8 @@ CREATE TABLE IF NOT EXISTS buscas (
     total_leads INTEGER
 );
 CREATE TABLE IF NOT EXISTS leads (
-    chave TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chave TEXT NOT NULL UNIQUE,
     place_id TEXT, cid TEXT,
     nome TEXT NOT NULL, nome_norm TEXT NOT NULL,
     categoria TEXT, endereco TEXT, cidade TEXT, uf TEXT,
@@ -41,12 +45,13 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 CREATE TABLE IF NOT EXISTS leads_busca (
     busca_id INTEGER NOT NULL REFERENCES buscas(id),
-    chave TEXT NOT NULL REFERENCES leads(chave),
-    PRIMARY KEY (busca_id, chave)
+    lead_id INTEGER NOT NULL REFERENCES leads(id),
+    PRIMARY KEY (busca_id, lead_id)
 );
 """
 
 STATUS_LEAD = ("novo", "contatado", "respondeu", "fechado", "descartado")
+STATUS_BUSCA_ABERTOS = ("criada", "working")
 
 
 def agora():
@@ -54,8 +59,11 @@ def agora():
 
 
 def abrir(caminho=":memory:"):
-    conn = sqlite3.connect(caminho)
+    conn = sqlite3.connect(caminho, timeout=10)
     conn.row_factory = sqlite3.Row
+    if str(caminho) != ":memory:":
+        conn.execute("PRAGMA journal_mode=WAL")  # leitura nao trava enquanto a busca grava
+    conn.execute("PRAGMA busy_timeout=10000")
     conn.executescript(ESQUEMA)
     return conn
 
@@ -70,17 +78,39 @@ def criar_busca(conn, categoria, cidade, uf, tamanho, parametros, email_ligado):
 
 
 def atualizar_busca(conn, busca_id, **campos):
-    permitidos = {"job_id", "status", "erro", "total_leads"}
+    permitidos = {"job_id", "status", "erro", "total_leads", "parametros"}
     if not campos or set(campos) - permitidos:
         raise ValueError("campo de busca invalido")
+    if "parametros" in campos:
+        campos["parametros"] = json.dumps(campos["parametros"])
     sql = ", ".join(f"{c} = ?" for c in campos)
     conn.execute(f"UPDATE buscas SET {sql} WHERE id = ?", (*campos.values(), busca_id))
     conn.commit()
 
 
+def _busca(linha):
+    d = dict(linha)
+    d["email_ligado"] = bool(d["email_ligado"])
+    d["parametros"] = json.loads(d["parametros"])
+    return d
+
+
 def obter_busca(conn, busca_id):
     linha = conn.execute("SELECT * FROM buscas WHERE id = ?", (busca_id,)).fetchone()
-    return dict(linha) if linha else None
+    return _busca(linha) if linha else None
+
+
+def listar_buscas(conn):
+    return [_busca(r) for r in conn.execute("SELECT * FROM buscas ORDER BY id DESC")]
+
+
+def interromper_buscas_abertas(conn):
+    """No inicio do servidor: busca que ficou 'rodando' de uma execucao anterior nao esta rodando."""
+    cur = conn.execute(
+        "UPDATE buscas SET status='erro', erro=? WHERE status IN ('criada','working')",
+        ("Interrompida: o kit foi fechado durante a busca. Faça a busca de novo.",))
+    conn.commit()
+    return cur.rowcount
 
 
 def salvar_leads(conn, busca_id, leads, cidade, uf, email_ligado):
@@ -104,15 +134,16 @@ def salvar_leads(conn, busca_id, leads, cidade, uf, email_ligado):
              int(l["celular"]), l["avaliacoes"], l["nota_maps"], int(l["delivery"]), int(l["reserva"]),
              json.dumps(l["emails"]), l["latitude"], l["longitude"], l["link"], int(email_ligado),
              agora(), agora()))
-        conn.execute("INSERT OR IGNORE INTO leads_busca (busca_id, chave) VALUES (?,?)",
-                     (busca_id, l["chave"]))
+        conn.execute(
+            "INSERT OR IGNORE INTO leads_busca (busca_id, lead_id)"
+            " SELECT ?, id FROM leads WHERE chave = ?", (busca_id, l["chave"]))
     conn.commit()
 
 
 def _para_lead(linha):
     """Linha do banco -> o mesmo formato de lead limpo que o modulo limpeza produz."""
     d = dict(linha)
-    for campo in ("celular", "delivery", "reserva"):
+    for campo in ("celular", "delivery", "reserva", "email_ligado"):
         d[campo] = bool(d[campo])
     d["emails"] = json.loads(d["emails"] or "[]")
     d["motivos"] = json.loads(d["motivos"]) if d["motivos"] else []
@@ -120,13 +151,22 @@ def _para_lead(linha):
 
 
 def todos_os_leads(conn):
-    return [_para_lead(r) for r in conn.execute("SELECT * FROM leads ORDER BY chave")]
+    return [_para_lead(r) for r in conn.execute("SELECT * FROM leads ORDER BY id")]
+
+
+def obter_lead(conn, lead_id):
+    linha = conn.execute("SELECT * FROM leads WHERE id = ?", (lead_id,)).fetchone()
+    return _para_lead(linha) if linha else None
+
+
+def ids_da_busca(conn, busca_id):
+    return {r[0] for r in conn.execute("SELECT lead_id FROM leads_busca WHERE busca_id = ?", (busca_id,))}
 
 
 def leads_da_busca(conn, busca_id):
     linhas = conn.execute(
-        "SELECT l.* FROM leads l JOIN leads_busca b ON b.chave = l.chave WHERE b.busca_id = ?"
-        " ORDER BY l.chave", (busca_id,))
+        "SELECT l.* FROM leads l JOIN leads_busca b ON b.lead_id = l.id WHERE b.busca_id = ?"
+        " ORDER BY l.id", (busca_id,))
     return [_para_lead(r) for r in linhas]
 
 
@@ -138,8 +178,16 @@ def gravar_notas(conn, notas):
     conn.commit()
 
 
-def mudar_status(conn, chave, status):
-    if status not in STATUS_LEAD:
-        raise ValueError("status invalido: " + status)
-    conn.execute("UPDATE leads SET status=?, atualizado_em=? WHERE chave=?", (status, agora(), chave))
+def atualizar_lead(conn, lead_id, status=None, anotacao=None, mensagem_editada=None):
+    """Muda so os campos dados. Devolve False se o lead nao existe."""
+    if status is not None and status not in STATUS_LEAD:
+        raise ValueError("status invalido: " + str(status))
+    campos = {k: v for k, v in (("status", status), ("anotacao", anotacao),
+                                ("mensagem_editada", mensagem_editada)) if v is not None}
+    if not campos:
+        return obter_lead(conn, lead_id) is not None
+    sql = ", ".join(f"{c} = ?" for c in campos)
+    cur = conn.execute(f"UPDATE leads SET {sql}, atualizado_em = ? WHERE id = ?",
+                       (*campos.values(), agora(), lead_id))
     conn.commit()
+    return cur.rowcount == 1

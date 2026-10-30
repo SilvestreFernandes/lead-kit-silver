@@ -6,44 +6,7 @@ from pathlib import Path
 from kit import banco, buscar
 from kit import motor as m
 from kit.geocodificar import ErroGeocodificacao
-from testes.fixtures import csv_texto, perfil_ficticio
-
-
-class MotorDeMentira(m.Motor):
-    """Usa o montar_pedido de verdade, mas nao abre rede nenhuma."""
-
-    def __init__(self, csv=None, ligado=True, falha=None):
-        super().__init__("http://127.0.0.1:8080", dormir=lambda s: None)
-        self.csv, self.ligado, self.falha = csv if csv is not None else csv_texto(), ligado, falha
-        self.pedidos = []
-
-    def no_ar(self):
-        return self.ligado
-
-    def criar_job(self, pedido):
-        self.pedidos.append(pedido)
-        return "job1"
-
-    def esperar(self, job_id, intervalo=5, limite=None, ao_esperar=None):
-        if self.falha:
-            raise self.falha
-        if ao_esperar:
-            ao_esperar(5)
-        return "ok"
-
-    def baixar_csv(self, job_id):
-        return self.csv
-
-
-class GeoDeMentira:
-    def __init__(self, erro=None):
-        self.erro, self.chamadas = erro, []
-
-    def buscar(self, cidade, uf):
-        self.chamadas.append((cidade, uf))
-        if self.erro:
-            raise self.erro
-        return (-15.65, -47.79)
+from testes.fixtures import GeoDeMentira, MotorDeMentira, csv_texto, perfil_ficticio
 
 
 class TestBuscar(unittest.TestCase):
@@ -164,6 +127,29 @@ class TestBuscar(unittest.TestCase):
         self.perfil.write_text(json.dumps(p), encoding="utf-8")
         _, texto = self.rodar()
         self.assertNotIn("nenhum e-mail publicado", texto)
+
+    def test_executar_busca_avisa_cada_etapa_em_ordem(self):
+        conn = banco.abrir(str(self.banco))
+        self.addCleanup(conn.close)
+        bid = buscar.iniciar_busca(conn, "padaria", "Cidade Teste", "DF", "rapida", False)
+        etapas = []
+        buscar.executar_busca(conn, bid, perfil_ficticio(), MotorDeMentira(), GeoDeMentira(),
+                              lambda etapa, seg=None: etapas.append(etapa))
+        sem_repeticao = [e for i, e in enumerate(etapas) if i == 0 or e != etapas[i - 1]]
+        self.assertEqual(sem_repeticao, ["Achando a cidade no mapa", "Enviando a busca ao motor",
+                                         "Esperando o motor", "Lendo os resultados",
+                                         "Calculando as notas"])
+
+    def test_erro_inesperado_tambem_marca_a_busca(self):
+        conn = banco.abrir(str(self.banco))
+        self.addCleanup(conn.close)
+        bid = buscar.iniciar_busca(conn, "padaria", "Cidade Teste", "DF", "rapida", False)
+        with self.assertRaises(RuntimeError):
+            buscar.executar_busca(conn, bid, perfil_ficticio(), MotorDeMentira(falha=RuntimeError("quebrou")),
+                                  GeoDeMentira())
+        busca = banco.obter_busca(conn, bid)
+        self.assertEqual(busca["status"], "erro")
+        self.assertIn("quebrou", busca["erro"])
 
     def test_uf_vira_maiuscula_e_tamanho_invalido_e_recusado(self):
         self.assertEqual(self.args().uf, "DF")

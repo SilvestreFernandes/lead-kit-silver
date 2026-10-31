@@ -428,3 +428,9 @@ a.btn[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
 .como-fazer { margin: 4px 0 12px; }
 .como-fazer summary { cursor: pointer; font-weight: 600; margin: 0 0 10px; }
 .como-fazer .cmd { margin-top: 10px; }
+
+.ligar-motor { margin: 4px 0 14px; }
+.ligar-motor p { margin: 0 0 10px; }
+.ligar-motor .ligando::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: currentColor; animation: pulso 1.2s ease-in-out infinite; }
+@keyframes pulso { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .ligar-motor .ligando::before { animation: none; } }

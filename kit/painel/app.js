@@ -7,6 +7,7 @@ import {
 } from './util.js';
 import { el, limpar, blocoEstado, blocoCarregando, instrucoesComComando, avisar } from './dom.js';
 import { COMANDO_LIGAR_KIT, PASSOS_LIGAR_KIT, motivoDoMotor } from './instrucoes.js';
+import { criarLigarMotor, podeLigarPeloPainel, chaveDoMotor } from './ligar-motor.js';
 import { montarPerfilAusente, montarPerfilInvalido } from './tela-perfil.js';
 import { montarBuscar } from './tela-buscar.js';
 import { montarLeads } from './tela-leads.js';
@@ -22,6 +23,7 @@ const app = {
   falha: null,         // ErroApi da última tentativa, ou null
   carregou: false,     // já tentou ao menos uma vez
   aba: abaDoHash(location.hash),
+  chaveAvisos: null,   // o que as faixas de aviso mostram agora, para não redesenhar à toa
   chaveTela: null,     // para não redesenhar a tela (e apagar o que a pessoa digitou) a cada verificação
   limparTela: null,    // função da tela atual para desfazer o que ela montou
   parametros: null,    // recado de uma tela para a próxima (ex.: abrir Leads filtrado por uma busca)
@@ -122,6 +124,11 @@ function botaoPequeno(rotulo, aoClicar, primario) {
 }
 
 function desenharAvisos() {
+  // Só redesenha quando algo mudou: assim o "passo a passo" aberto não fecha a cada verificação.
+  const chave = JSON.stringify([app.carregou, app.falha && app.falha.tipo, !!app.estado,
+    chaveDoMotor(app.estado), app.aba === 'buscar', app.estado ? situacaoDoPerfil(app.estado) : null]);
+  if (chave === app.chaveAvisos) return;
+  app.chaveAvisos = chave;
   limpar(area.avisos);
   if (!app.carregou) return;
   if (app.falha && app.falha.tipo === 'rede' && app.estado) {
@@ -138,7 +145,9 @@ function desenharAvisos() {
     const motivo = motivoDoMotor(app.estado.motor_diagnostico);
     area.avisos.append(faixa('warn',
       el('p', {}, el('b', {}, motivo.titulo + '. '), 'Você ainda vê os leads salvos, mas não dá para fazer buscas novas. ' + motivo.texto),
-      ...instrucoesComComando({ passos: motivo.passos, comando: motivo.comando, recolhido: true }),
+      criarLigarMotor({ estado: app.estado, atualizarEstado, avisar }),
+      ...instrucoesComComando({ passos: motivo.passos, comando: motivo.comando, recolhido: true,
+        titulo: podeLigarPeloPainel(app.estado) ? 'Prefere ligar sozinho? Veja o passo a passo' : undefined }),
       el('div', { class: 'acoes' }, botaoPequeno('Verificar de novo', () => atualizarEstado(), true))));
   }
 }

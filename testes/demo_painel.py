@@ -26,6 +26,7 @@ import sys
 import tempfile
 import threading
 import time
+import types
 import webbrowser
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -37,6 +38,7 @@ if str(RAIZ) not in sys.path:
 from kit import banco, buscar, diagnostico, limpeza, servidor, validar_perfil  # noqa: E402
 from kit import motor as motor_mod  # noqa: E402
 from kit.geocodificar import CidadeNaoEncontrada  # noqa: E402
+from kit.ligar_motor import LigadorDoMotor  # noqa: E402
 from testes.fixtures import (GeoDeMentira, MotorDeMentira, csv_texto, leads_em_massa, linha,  # noqa: E402
                              perfil_ficticio)
 
@@ -178,8 +180,16 @@ def montar(estado, porta, atraso=3.0):
         e = "docker_parado" if estado == "docker_parado" else "motor_parado"
         return {"estado": e, **diagnostico.DIAGNOSTICOS[e]}
 
+    def ligar_de_mentira(comando, **kwargs):
+        """Na demonstracao o botao Ligar o motor nao roda o Docker: espera um pouco e finge que ligou."""
+        time.sleep(max(1.0, atraso * 2))
+        motor.ligado = True
+        return types.SimpleNamespace(returncode=0)
+
+    ligador = LigadorDoMotor(servidor.RAIZ, dados, executar=ligar_de_mentira)
     srv = servidor.Servidor(porta=porta, pasta_dados=dados, motor=motor, geo=geo,
-                            dormir=lambda s: time.sleep(min(1.0, atraso)), diagnostico=diagnostico_da_demo)
+                            dormir=lambda s: time.sleep(min(1.0, atraso)), diagnostico=diagnostico_da_demo,
+                            ligador=ligador)
     srv.pasta_temporaria = pasta  # quem sobe a demonstracao apaga isto ao terminar
 
     # Cada ponto da busca media devolve uma lista diferente, que se sobrepoe a do vizinho.

@@ -29,6 +29,7 @@ if str(RAIZ) not in sys.path:
 
 from kit import banco, buscar, consulta, diagnostico as diagnostico_mod, motor as motor_mod, validar_perfil  # noqa: E402
 from kit.geocodificar import Geocodificador  # noqa: E402
+from kit.ligar_motor import LigadorDoMotor  # noqa: E402
 
 VERSAO = "0.2.0-dev"
 PORTA_PADRAO = 8787
@@ -85,6 +86,8 @@ def rota_estado(srv, params, consulta_, corpo):
         "perfil": {"existe": srv.caminho_perfil.exists(), "valido": not erros,
                    "erros": erros, "avisos": avisos},
         "busca_em_andamento": srv.busca_ativa,
+        # Situacao do botao "Ligar o motor": None, ou {"estado": "ligando" | "ok" | "erro", "mensagem": ...}
+        "ligando_motor": srv.ligador.situacao(),
     }
 
 
@@ -255,6 +258,22 @@ def rota_busca_criar(srv, params, consulta_, corpo):
     return 202, {"id": busca_id, "status": "criada"}
 
 
+def rota_motor_ligar(srv, params, consulta_, corpo):
+    """Liga o motor com um comando fixo. Responde na hora; o painel acompanha pelo /api/estado."""
+    if srv.motor.no_ar():
+        raise Erro(409, "O motor já está ligado.")
+    if srv.ligador.esta_ligando():
+        return 202, {"estado": "ligando"}
+    motivo = srv.diagnostico(srv.motor)
+    if motivo is None:
+        raise Erro(409, "O motor já está ligado.")
+    if motivo["estado"] != "motor_parado":
+        # Docker fechado ou ausente: o botao nao resolveria. A tela mostra o passo a passo manual.
+        raise Erro(409, diagnostico_mod.mensagem_completa(motivo), motor_diagnostico=motivo)
+    srv.ligador.iniciar()
+    return 202, {"estado": "ligando"}
+
+
 def _busca_publica(srv, busca):
     d = {k: busca[k] for k in ("id", "criada_em", "terminou_em", "categoria", "cidade", "uf", "tamanho",
                                "email_ligado", "status", "erro", "erro_tipo", "total_leads", "novos",
@@ -313,6 +332,7 @@ ROTAS = [
     ("GET", r"/api/leads/(?P<id>\d+)", rota_lead_ler, False),
     ("PATCH", r"/api/leads/(?P<id>\d+)", rota_lead_alterar, True),
     ("POST", r"/api/buscas", rota_busca_criar, True),
+    ("POST", r"/api/motor/ligar", rota_motor_ligar, True),
     ("GET", r"/api/buscas", rota_buscas_listar, False),
     ("GET", r"/api/buscas/(?P<id>\d+)", rota_busca_ler, False),
     ("GET", r"/api/exportar", rota_exportar, False),
@@ -464,7 +484,7 @@ class Servidor(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, porta=PORTA_PADRAO, pasta_dados=None, pasta_painel=None, motor=None, geo=None,
-                 token=None, endereco=ENDERECO, dormir=time.sleep, diagnostico=None):
+                 token=None, endereco=ENDERECO, dormir=time.sleep, diagnostico=None, ligador=None):
         if endereco != ENDERECO:
             raise ValueError("O servidor só pode escutar em 127.0.0.1.")
         super().__init__((endereco, porta), Manipulador)
@@ -480,6 +500,7 @@ class Servidor(ThreadingHTTPServer):
         self.geo = geo or Geocodificador(arquivo_cache=pasta_dados / "cache_geocodificacao.json")
         self.dormir = dormir
         self.diagnostico = diagnostico or diagnostico_mod.DiagnosticoComCache()
+        self.ligador = ligador or LigadorDoMotor(RAIZ, pasta_dados)
         self.trava_busca = threading.Lock()
         self.busca_ativa = None
         self.progresso = {}

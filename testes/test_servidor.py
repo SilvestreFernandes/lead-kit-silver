@@ -5,14 +5,18 @@ import http.client
 import io
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
+import types
 import time
 import unittest
 from pathlib import Path
 
 from kit import banco, limpeza, servidor
+from kit import diagnostico as diagnostico_mod
+from kit.ligar_motor import LigadorDoMotor
 from kit import motor as motor_mod
 from kit.geocodificar import CidadeNaoEncontrada
 from testes.fixtures import (GeoDeMentira, MotorDeMentira, csv_texto, leads_em_massa, linha, perfil_ficticio)
@@ -58,6 +62,9 @@ class Base(unittest.TestCase):
         if self.com_perfil:
             self.gravar_perfil(perfil_ficticio())
         self.motor, self.geo = MotorDeMentira(), GeoDeMentira()
+        # Nenhum teste roda o Docker de verdade: o executor e sempre falso.
+        self.comandos = []
+        self.ligador = LigadorDoMotor(self.raiz, self.dados, executar=self.executor_falso)
         self.iniciar_servidor()
         if self.com_leads:
             self.popular_banco()
@@ -67,9 +74,14 @@ class Base(unittest.TestCase):
         from kit import diagnostico as d
         return None if motor.no_ar() else {"estado": "motor_parado", **d.DIAGNOSTICOS["motor_parado"]}
 
+    def executor_falso(self, comando, **kwargs):
+        self.comandos.append((comando, kwargs))
+        return types.SimpleNamespace(returncode=0)
+
     def iniciar_servidor(self):
         self.srv = servidor.Servidor(porta=0, pasta_dados=self.dados, pasta_painel=self.painel,
-                                     motor=self.motor, geo=self.geo, token=TOKEN, diagnostico=self.diagnostico_falso)
+                                     motor=self.motor, geo=self.geo, token=TOKEN, diagnostico=self.diagnostico_falso,
+                                     ligador=self.ligador)
         self.porta = self.srv.porta
         threading.Thread(target=self.srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         self.addCleanup(self.parar_servidor, self.srv)
@@ -159,13 +171,132 @@ class Base(unittest.TestCase):
             time.sleep(0.05)
         self.fail("a busca não terminou a tempo")
 
+# ===================================================== botao "Ligar o motor"
+
+class TestLigarMotor(Base):
+    def esperar_ligador(self):
+        self.ligador.thread.join(10)
+        self.assertFalse(self.ligador.thread.is_alive())
+
+    def test_sem_token_da_401_e_nada_roda(self):
+        self.motor.ligado = False
+        self.assertEqual(self.pedir("POST", "/api/motor/ligar", {}).status, 401)
+        self.assertEqual(self.pedir("POST", "/api/motor/ligar", {}, token="errado").status, 401)
+        self.assertEqual(self.comandos, [])
+
+    def test_liga_com_comando_fixo_sem_shell_na_pasta_do_kit(self):
+        self.motor.ligado = False
+        r = self.escrever("POST", "/api/motor/ligar")
+        self.assertEqual((r.status, r.json), (202, {"estado": "ligando"}))
+        self.esperar_ligador()
+        comando, kwargs = self.comandos[0]
+        self.assertEqual(comando, ["docker", "compose", "-f", str((self.raiz / "docker-compose.yml").resolve()), "up", "-d"])
+        self.assertNotIn("shell", kwargs)
+        self.assertEqual(kwargs["cwd"], str(self.raiz))
+        self.assertEqual(kwargs["timeout"], 600)
+        self.assertEqual(self.ler("/api/estado").json["ligando_motor"]["estado"], "ok")
+
+    def test_responde_na_hora_sem_esperar_o_comando(self):
+        self.motor.ligado = False
+        solto = threading.Event()
+        self.ligador._executar = lambda c, **k: (solto.wait(10), types.SimpleNamespace(returncode=0))[1]
+        inicio = time.time()
+        r = self.escrever("POST", "/api/motor/ligar")
+        self.assertEqual(r.status, 202)
+        self.assertLess(time.time() - inicio, 3)
+        estado = self.ler("/api/estado").json["ligando_motor"]
+        self.assertEqual(estado["estado"], "ligando")
+        self.assertIn("alguns minutos", estado["mensagem"])
+        solto.set()
+        self.esperar_ligador()
+
+    def test_segundo_clique_durante_a_execucao_nao_dispara_outro_comando(self):
+        self.motor.ligado = False
+        solto = threading.Event()
+        self.ligador._executar = lambda c, **k: (self.comandos.append(c), solto.wait(10), types.SimpleNamespace(returncode=0))[2]
+        self.assertEqual(self.escrever("POST", "/api/motor/ligar").status, 202)
+        self.assertEqual(self.escrever("POST", "/api/motor/ligar").status, 202)
+        solto.set()
+        self.esperar_ligador()
+        self.assertEqual(len(self.comandos), 1)
+
+    def test_motor_ja_ligado_da_409_e_nao_roda_nada(self):
+        r = self.escrever("POST", "/api/motor/ligar")
+        self.assertEqual(r.status, 409)
+        self.assertEqual(self.comandos, [])
+
+    def test_docker_parado_ou_ausente_recusa_e_nao_roda_nada(self):
+        self.motor.ligado = False
+        for estado in ("docker_parado", "docker_ausente"):
+            self.srv.diagnostico = lambda m, e=estado: {"estado": e, **diagnostico_mod.DIAGNOSTICOS[e]}
+            r = self.escrever("POST", "/api/motor/ligar")
+            self.assertEqual(r.status, 409, estado)
+            self.assertIn("digite powershell" if estado == "docker_parado" else "Docker", r.json["erro"])
+        self.assertEqual(self.comandos, [])
+
+    def test_nada_do_navegador_chega_ao_comando(self):
+        self.motor.ligado = False
+        r = self.escrever("POST", "/api/motor/ligar", {"comando": "calc.exe", "args": ["--x"], "cwd": "C:\\", "shell": True},
+                          cabecalhos={"X-Comando": "calc.exe"})
+        self.assertEqual(r.status, 202)
+        self.esperar_ligador()
+        self.assertEqual(self.comandos[0][0][:3], ["docker", "compose", "-f"])
+        self.assertNotIn("calc", " ".join(self.comandos[0][0]))
+        self.assertEqual(self.comandos[0][0][-2:], ["up", "-d"])
+
+    def test_erro_do_comando_vira_mensagem_simples_e_o_detalhe_vai_para_o_log(self):
+        self.motor.ligado = False
+
+        def falha(comando, stdout=None, **kw):
+            stdout.write(b"Error response from daemon: SEGREDO-DO-LOG\n")
+            return types.SimpleNamespace(returncode=1)
+
+        self.ligador._executar = falha
+        self.escrever("POST", "/api/motor/ligar")
+        self.esperar_ligador()
+        estado = self.ler("/api/estado").json["ligando_motor"]
+        self.assertEqual(estado["estado"], "erro")
+        self.assertIn("log-motor.txt", estado["mensagem"])
+        self.assertNotIn("SEGREDO-DO-LOG", json.dumps(estado))
+        self.assertIn("SEGREDO-DO-LOG", (self.dados / "log-motor.txt").read_text(encoding="utf-8"))
+
+    def test_tempo_esgotado_e_docker_ausente_viram_mensagem_simples(self):
+        self.motor.ligado = False
+        for erro, trecho in ((subprocess.TimeoutExpired("docker", 600), "10 minutos"), (FileNotFoundError(), "Não encontrei o Docker")):
+            def levanta(comando, **kw):
+                raise erro
+            self.ligador._executar = levanta
+            self.escrever("POST", "/api/motor/ligar")
+            self.esperar_ligador()
+            estado = self.ler("/api/estado").json["ligando_motor"]
+            self.assertEqual(estado["estado"], "erro")
+            self.assertIn(trecho, estado["mensagem"])
+
+    def test_o_log_nao_e_servido_por_nenhuma_rota(self):
+        (self.dados / "log-motor.txt").write_text("SEGREDO-DO-LOG", encoding="utf-8")
+        # O log fica em dados/, fora da pasta que o servidor serve como painel.
+        self.assertFalse(self.ligador.arquivo_log.resolve().is_relative_to(self.srv.pasta_painel.resolve()))
+        self.assertEqual(self.ligador.arquivo_log.parent, self.dados)
+        for caminho in ("/log-motor.txt", "/dados/log-motor.txt", "/../dados/log-motor.txt", "/%2e%2e/dados/log-motor.txt",
+                        "/api/log-motor.txt", "/api/motor/log", "/api/motor/ligar/log"):
+            r = self.ler(caminho)
+            self.assertIn(r.status, (400, 404, 405), caminho)
+            self.assertNotIn(b"SEGREDO-DO-LOG", r.corpo, caminho)
+        for caminho in ROTAS_DE_LEITURA:
+            self.assertNotIn(b"SEGREDO-DO-LOG", self.ler(caminho).corpo, caminho)
+
+    def test_rotas_nao_listam_nada_para_ler_o_log(self):
+        rotas = [f.__name__ for _, _, f, _ in servidor.ROTAS]
+        self.assertNotIn("rota_motor_log", rotas)
+        self.assertEqual([c.pattern for m, c, f, e in servidor.ROTAS if "motor" in c.pattern], [r"/api/motor/ligar\Z"])
+
 
 # ===================================================== degrau 1: segurança
 
 ROTAS_DE_LEITURA = ["/api/estado", "/api/perfil", "/api/leads", "/api/leads/1", "/api/buscas",
                     "/api/buscas/1", "/api/exportar", "/", "/app.js"]
 ROTAS_DE_ESCRITA = [("PUT", "/api/perfil"), ("POST", "/api/buscas"), ("PATCH", "/api/leads/1"),
-                    ("POST", "/api/leads/reavaliar")]
+                    ("POST", "/api/leads/reavaliar"), ("POST", "/api/motor/ligar")]
 
 
 class TestSeguranca(Base):

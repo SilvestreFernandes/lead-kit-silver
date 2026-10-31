@@ -10,6 +10,7 @@
 import { ler, escrever, ABANDONADA, ErroApi } from './api.js';
 import { el, limpar, blocoEstado, blocoCarregando, cabecalhoDaTela, instrucoesComComando, avisar } from './dom.js';
 import { motivoDoMotor } from './instrucoes.js';
+import { criarLigarMotor, chaveDoMotor } from './ligar-motor.js';
 import {
   ROTULOS_DE_TAMANHO, LIMITE_TEXTO_BUSCA, ETAPAS_DA_BUSCA, sugestoesDeCidade, sugestoesDeCategoria, validarBusca,
   formatarDuracao, quandoFoi, descreverBusca, indiceDaEtapa, percentualDaBusca, resumoDaBusca, plural,
@@ -138,11 +139,14 @@ export function criarHistorico(buscas, aoVer) {
           ? el('button', { class: 'btn btn-small', type: 'button', onClick: () => aoVer(b.id) }, 'Ver leads') : null)))));
 }
 
-export function criarBlocoDoMotor(diagnostico, aoVerificar) {
+// `ligar` é o bloco do botão "Ligar o motor" (ou null). Com o botão, o passo a passo manual fica recolhido.
+export function criarBlocoDoMotor(diagnostico, aoVerificar, ligar) {
   const d = motivoDoMotor(diagnostico);
   return blocoEstado({
     tipo: 'warn', selo: '!', titulo: d.titulo, texto: d.texto,
-    extras: instrucoesComComando({ passos: d.passos, comando: d.comando }),
+    extras: ligar
+      ? [ligar, ...instrucoesComComando({ passos: d.passos, comando: d.comando, recolhido: true, titulo: 'Prefere ligar sozinho? Veja o passo a passo' })]
+      : instrucoesComComando({ passos: d.passos, comando: d.comando }),
     acoes: [{ rotulo: 'Verificar de novo', primario: true, aoClicar: aoVerificar }],
   });
 }
@@ -177,11 +181,17 @@ export function montarBuscar(raiz, ctx) {
   // ---- estado do motor
   const motorNoAr = () => { const e = ctx.estado(); return !e || e.motor_no_ar !== false; };
 
+  let chaveDoBlocoDoMotor = null;
   function desenharMotor() {
-    limpar(areaMotor);
     const e = ctx.estado();
-    if (e && e.motor_no_ar === false && !estado.ativaId) {
-      areaMotor.append(criarBlocoDoMotor(e.motor_diagnostico, () => ctx.atualizarEstado()), el('div', { style: 'height:24px' }));
+    const chave = (e && e.motor_no_ar === false && !estado.ativaId) ? chaveDoMotor(e) : '';
+    if (chave !== chaveDoBlocoDoMotor) {  // só redesenha quando algo mudou: não fecha o passo a passo a cada verificação
+      chaveDoBlocoDoMotor = chave;
+      limpar(areaMotor);
+      if (chave) {
+        const ligar = criarLigarMotor({ estado: e, atualizarEstado: () => ctx.atualizarEstado(), avisar: ctx.avisar });
+        areaMotor.append(criarBlocoDoMotor(e.motor_diagnostico, () => ctx.atualizarEstado(), ligar), el('div', { style: 'height:24px' }));
+      }
     }
     if (ref.botao) atualizarBotao();
   }

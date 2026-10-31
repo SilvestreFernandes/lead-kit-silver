@@ -49,6 +49,7 @@ lead-kit-silver/
     geocodificar.py         cidade para latitude e longitude (Nominatim)
     limpeza.py              lê o CSV do motor, limpa os campos e tira duplicados
     diagnostico.py          descobre por que o motor não responde (Docker ausente, Docker parado ou só o motor parado)
+    ligar_motor.py          liga o motor em segundo plano a pedido do painel (comando fixo, log em dados/)
     grade.py                pontos de uma busca maior (centro e quatro pontos ao redor)
     xlsx.py                 gera planilha .xlsx só com zipfile e XML escritos à mão
     pontuacao.py            regras e nota A, B, C
@@ -186,6 +187,7 @@ O servidor (`kit/servidor.py`) usa só a biblioteca padrão do Python, escuta em
 | `GET /api/opcoes` | Regras com pesos padrão, exclusões, marcadores, tamanhos de busca, UFs e status. O painel monta os formulários com isso, sem repetir a lista no JavaScript |
 | `GET /api/perfil` | Lê o perfil |
 | `PUT /api/perfil` | Grava o perfil, mas só depois de passar no validador |
+| `POST /api/motor/ligar` | Liga o motor (`docker compose up -d`) em segundo plano. Exige token. Só roda com o Docker ligado e o motor desligado (senão `409`). Responde `202` na hora; o painel acompanha por `ligando_motor` em `GET /api/estado` (`ligando`, `ok` ou `erro`, com mensagem simples). Comando fixo, sem shell, caminho absoluto do `docker-compose.yml`, pasta do kit, sem janela de console no Windows, limite de 10 minutos. A saída vai para `dados/log-motor.txt`, que nenhuma rota entrega |
 | `POST /api/buscas` | Cria uma busca: categoria, cidade e UF, tamanho, extras |
 | `GET /api/buscas` | Lista as buscas já feitas |
 | `GET /api/buscas/{id}` | Status e progresso de uma busca: etapa, ponto atual e total de pontos, tempo decorrido, tempo estimado e, ao fim, `total_leads`, `novos`, `ja_existiam`, `fora_da_lista`, `terminou_em` e, se deu erro, `erro` e `erro_tipo` (`cidade`, `servico_de_mapas`, `motor`, `formato`, `parcial`, `interrompida` ou `inesperado`). **Não existe rota para cancelar uma busca** (ver `fase0-verificacao-motor.md`) |

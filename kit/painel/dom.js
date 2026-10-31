@@ -103,11 +103,11 @@ export function passoAPasso(passos) {
 // Passo a passo (onde e como) seguido do comando com botão de copiar.
 // É a única forma de mostrar um comando na tela: a pessoa nunca recebe um comando sem saber onde digitar.
 // Com `recolhido`, os passos ficam numa seção que se abre ao clicar (para faixas de aviso).
-export function instrucoesComComando({ passos, comando: texto, recolhido }) {
+export function instrucoesComComando({ passos, comando: texto, recolhido, titulo = 'Como fazer, passo a passo' }) {
   const lista = passoAPasso(passos);
   const caixa = texto ? comando(texto) : null;
   if (recolhido) {
-    return [el('details', { class: 'como-fazer' }, el('summary', {}, 'Como fazer, passo a passo'), lista, caixa)];
+    return [el('details', { class: 'como-fazer' }, el('summary', {}, titulo), lista, caixa)];
   }
   return [lista, caixa];
 }

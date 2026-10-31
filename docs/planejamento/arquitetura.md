@@ -88,11 +88,14 @@ lead-kit-silver/
     js/util.test.mjs        testes de util.js e api.js
     js/leads.test.mjs       prova que dado malicioso do Google vira só texto na tela de Leads (DOM de mentira)
     js/buscar.test.mjs      tela Buscar: textos, resumo, erros, zero resultado, sem botão de cancelar
+    js/oferta.test.mjs      tela Minha oferta: rascunho, conferência, limpeza, cortes e prévia das mensagens
+    js/ligar-motor.test.mjs botão Ligar o motor
     js/dom_falso.mjs        o DOM de mentira usado pelos testes de JavaScript
     test_demo.py            a demonstração do painel sobe em todos os estados
     demo_painel.py          servidor de demonstração com dados fictícios, um modo por estado do painel (ver o topo do arquivo)
     test_servidor.py
     test_xlsx.py
+    test_oferta.py          cortes do painel iguais aos do kit, descrições, pesos padrão intocados
     test_diagnostico.py
     test_privacidade.py     o que a tela diz que sai do computador bate com o que o código faz
     test_testar_api.py
@@ -232,7 +235,7 @@ O painel é uma página estática (`index.html`, `estilo.css` e alguns arquivos 
 | --- | --- | --- |
 | Buscar | Tipo de negócio (sugestões do perfil, aceita texto livre), UF e cidade (sugestões das regiões do perfil), tamanho da busca (rápida e média; ampla aparece como "em breve" e desativada) e o extra de e-mail. Cobertura fixa em 10 km ao redor do centro da cidade. Mostra a busca em andamento com progresso real, o resumo ao fim, os erros e o histórico | `GET /api/opcoes`, `GET /api/perfil`, `GET /api/buscas`, `POST /api/buscas`, `GET /api/buscas/{id}` |
 | Leads | Tabela com nota A, B, C, filtros (nota, status, texto, lista ou excluídos, busca), carregamento por partes de 100 e exportação. Ao abrir um lead (gaveta): "Por quê" em frases simples com os pontos, mensagem pronta e editável, copiar, abrir o WhatsApp, status e anotação. Fica sempre visível o aviso de conformidade quando a área é regulada ou a pessoa não sabe | `GET /api/leads`, `GET` e `PATCH /api/leads/{id}`, `GET /api/exportar` (CSV e .xlsx, com token), `GET /api/perfil`, `GET /api/buscas` |
-| Minha oferta | Edita o perfil: oferta, tom, regras e pesos, exclusões e os modelos de mensagem. Salvar recalcula as notas | `GET` e `PUT /api/perfil`, `POST /api/leads/reavaliar` |
+| Minha oferta | Edita o perfil, com as mesmas respostas das 12 perguntas: o que vende, nome e empresa, tipos de negócio, regiões, porte, atendimento, melhor cliente, regras de nota com peso de 0 a 5, cortes A e B (automáticos ou manuais), o que evitar (com listas de concorrentes e categorias), canais, tom, oferta de entrada, volume por semana, mensagens por canal e a resposta sobre regras da área. Salvar grava o perfil e dá nota de novo aos leads | `GET /api/opcoes`, `GET` e `PUT /api/perfil`, `POST /api/leads/reavaliar` |
 
 Regras da tela Buscar (fase 3):
 
@@ -243,6 +246,16 @@ Regras da tela Buscar (fase 3):
 - **Erros com mensagem própria:** motor desligado, Docker parado, Docker não encontrado, cidade não encontrada, serviço de localização inacessível, falha no meio da busca (o que já chegou fica salvo e aparece em Leads), formato de resultado desconhecido, busca interrompida por o kit ter sido fechado, e campo vazio (validado antes de enviar, sem pedido ao servidor).
 - **O que sai do computador:** a tela diz, e um teste confere com o código, que só o nome da cidade e o estado vão para o serviço de localização OpenStreetMap (Nominatim), que o motor local consulta o Google Maps pela conexão da pessoa e que leads, notas, perfil e mensagens ficam só no computador.
 - **Uso responsável:** aviso curto sobre os termos do Google, a LGPD e o envio manual. Na primeira busca maior, um aviso (que não bloqueia) sobre o risco de o Google limitar o acesso da internet por um tempo.
+
+Regras da tela Minha oferta (fase 3):
+
+- **Só edita o que as 12 perguntas já cobrem.** Nenhuma pergunta nova e nenhuma mudança nas perguntas. Os pesos padrão e os cortes de 70% e 40% não foram mexidos (um teste confere).
+- **Nada de IA.** A tela é um formulário. Salvar envia o perfil inteiro por `PUT /api/perfil` (o servidor valida e guarda a cópia anterior em `perfil.anterior.json`) e depois chama `POST /api/leads/reavaliar`. O resultado aparece em frase: quantos leads, e quantos A, B e C.
+- **Tudo vem do servidor.** Regras, exclusões (com uma `descricao` em português simples), marcadores, canais, tons, portes, atendimentos, volumes por semana, modelos padrão e frases de motivo chegam por `GET /api/opcoes`, sem lista repetida no JavaScript.
+- **Cortes:** por padrão o painel calcula (70% e 40% da soma dos pesos, para cima, a mesma conta de `pontuacao.cortes`, conferida por teste nos dois lados) e mostra a frase "Nota A: 7 ou mais...". Quem quiser pode digitar os dois cortes.
+- **Mensagens:** uma por canal (WhatsApp e e-mail), com botões que incluem os marcadores e uma prévia com um negócio de exemplo. Vazio quer dizer "usar o modelo padrão". O servidor exige a saída clara ("é só avisar que não escrevo mais") e mostra o erro em português.
+- **Não perde o que a pessoa fez:** o que foi editado e não foi salvo continua ao trocar de aba (enquanto a página estiver aberta), a página avisa antes de fechar com mudanças e há "Descartar mudanças". Erros aparecem no campo e num resumo no topo, e nada é enviado se faltar campo obrigatório.
+- **Perfil com problemas:** a tela abre mesmo assim, mostra o que o servidor achou e deixa corrigir.
 
 Regras da tela de Leads (fase 3):
 

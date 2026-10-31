@@ -9,6 +9,7 @@
   "peso_maximo": 5,
   "marcadores": ["nome", "cidade", "categoria", "motivo", "meu_nome", "minha_empresa"],
   "campos_sensiveis": ["cpf", "senha", "password", "saude", "rg", "cartao"],
+  "volumes_semana": [{"id": "ate-10", "texto": "Até 10"}, {"id": "10-30", "texto": "De 10 a 30"}, {"id": "30-60", "texto": "De 30 a 60"}, {"id": "mais-60", "texto": "Mais de 60"}],
   "opcionais": {"exclusoes_concorrentes": [], "exclusoes_categorias": []},
   "rotulos": {
     "negocio.oferta": "o que você vende",

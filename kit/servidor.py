@@ -27,7 +27,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
-from kit import banco, buscar, consulta, diagnostico as diagnostico_mod, motor as motor_mod, validar_perfil  # noqa: E402
+from kit import banco, buscar, consulta, diagnostico as diagnostico_mod, modelos, motor as motor_mod, validar_perfil  # noqa: E402
 from kit.geocodificar import Geocodificador  # noqa: E402
 from kit.ligar_motor import LigadorDoMotor  # noqa: E402
 
@@ -95,9 +95,14 @@ def rota_opcoes(srv, params, consulta_, corpo):
     """Tudo que o painel precisa para montar formularios, vindo das regras do kit (nada duplicado no JS)."""
     esquema, regras = validar_perfil.ESQUEMA, validar_perfil.REGRAS
     return 200, {
-        "regras": [{"id": rid, "texto": cfg["texto"], "peso_padrao": cfg["peso"]}
+        "regras": [{"id": rid, "texto": cfg["texto"], "descricao": cfg.get("descricao", ""), "peso_padrao": cfg["peso"]}
                    for rid, cfg in regras["regras"].items()],
-        "exclusoes": [{"id": eid, "texto": cfg["texto"]} for eid, cfg in regras["exclusoes"].items()],
+        "exclusoes": [{"id": eid, "texto": cfg["texto"], "descricao": cfg.get("descricao", "")}
+                      for eid, cfg in regras["exclusoes"].items()],
+        "atendimentos": esquema["atendimentos"],
+        "volumes_semana": esquema["volumes_semana"],
+        "modelos_padrao": modelos.MODELOS_PROVISORIOS,
+        "frases_de_motivo": {rid: cfg["frase"] for rid, cfg in regras["regras"].items()},
         "marcadores": esquema["marcadores"],
         "canais": esquema["canais"], "tons": esquema["tons"], "portes": esquema["portes"],
         "peso_minimo": esquema["peso_minimo"], "peso_maximo": esquema["peso_maximo"],

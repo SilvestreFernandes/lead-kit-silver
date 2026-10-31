@@ -969,7 +969,13 @@ class TestOpcoes(Base):
         ids = [r["id"] for r in d["regras"]]
         self.assertEqual(ids, list(servidor.validar_perfil.REGRAS["regras"]))
         self.assertEqual(next(r for r in d["regras"] if r["id"] == "sem_site"),
-                         {"id": "sem_site", "texto": "sem site", "peso_padrao": 3})
+                         {"id": "sem_site", "texto": "sem site", "peso_padrao": 3,
+                          "descricao": "O perfil no Google Maps não tem site."})
+        self.assertTrue(all(r["descricao"] for r in d["regras"]) and all(e["descricao"] for e in d["exclusoes"]))
+        self.assertEqual(d["atendimentos"], ["presencial", "remoto", "ambos"])
+        self.assertEqual([v["id"] for v in d["volumes_semana"]], ["ate-10", "10-30", "30-60", "mais-60"])
+        self.assertEqual(set(d["modelos_padrao"]), {"whatsapp", "email"})
+        self.assertEqual(set(d["frases_de_motivo"]), set(ids))
         self.assertIn("franquia", [e["id"] for e in d["exclusoes"]])
         self.assertEqual(d["marcadores"], ["nome", "cidade", "categoria", "motivo", "meu_nome", "minha_empresa"])
         self.assertEqual((d["peso_minimo"], d["peso_maximo"]), (0, 5))

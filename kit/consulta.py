@@ -5,6 +5,7 @@ os leads do banco. Assim mudar o perfil muda o resultado sem precisar regravar n
 """
 import csv
 import io
+import re
 from urllib.parse import quote
 
 from kit import banco, modelos, pontuacao, xlsx
@@ -222,6 +223,13 @@ def mensagem_para_exportar(r, perfil):
     return next(iter(mensagens.values()))["texto"] if mensagens else ""
 
 
+def site_para_exibir(url):
+    """O endereco do site sem https://, www. e barra final: cabe na coluna e continua sendo o link inteiro."""
+    mostrado = re.sub(r"^https?://", "", url.strip(), flags=re.I)
+    mostrado = re.sub(r"^www\.", "", mostrado, flags=re.I)
+    return mostrado.rstrip("/")
+
+
 def exportar_xlsx(avaliados, perfil):
     """Bytes de uma planilha .xlsx pronta para mostrar a um cliente."""
     mostrar_exclusao = any(r["excluido_por"] for r in avaliados)
@@ -237,7 +245,7 @@ def exportar_xlsx(avaliados, perfil):
         xlsx.Coluna("Categoria", "texto", 24),
         xlsx.Coluna("Telefone", "texto", 18),
         xlsx.Coluna("WhatsApp", "texto", largura_fixa=18),
-        xlsx.Coluna("Site", "texto", 34),
+        xlsx.Coluna("Site", "texto", 30),
         xlsx.Coluna("Endereço", "quebra", 44),
         xlsx.Coluna("Avaliação no Maps", "decimal", largura_fixa=12),
         xlsx.Coluna("Nº de avaliações", "inteiro", largura_fixa=13),
@@ -257,7 +265,7 @@ def exportar_xlsx(avaliados, perfil):
         linha += [
             l["categoria"], telefone_para_planilha(l),
             xlsx.Celula("Abrir WhatsApp", link=zap) if zap else "",
-            xlsx.Celula(l["site"], link=l["site"]) if l["site"] else "",
+            xlsx.Celula(site_para_exibir(l["site"]), link=l["site"]) if l["site"] else "",
             l["endereco"], l["nota_maps"], l["avaliacoes"], l["status"], l["anotacao"], mensagem,
         ]
         linhas.append(linha)

@@ -137,8 +137,35 @@ class TestAparenciaDeRelatorio(unittest.TestCase):
         self.assertEqual(len(larguras), len(self.p.cabecalho()))
         self.assertTrue(all(8 <= w <= 64 for w in larguras), larguras)
         cab = self.p.cabecalho()
-        self.assertEqual(larguras[cab.index("Nota")], 8)
         self.assertEqual(larguras[cab.index("Mensagem")], 64)  # texto longo bate no limite
+
+    def test_titulo_cabe_inteiro_com_o_botao_do_filtro(self):
+        """No Google Planilhas o botao do filtro come espaco do titulo: 'Nota' virava 'Not a'."""
+        cab = self.p.cabecalho()
+        larguras = [float(c.get("width")) for c in self.p.folha.iterfind(".//m:col", NS)]
+        for titulo, largura in zip(cab, larguras):
+            self.assertGreaterEqual(largura, xlsx.largura_minima_do_titulo(titulo), titulo)
+            for palavra in titulo.split():
+                self.assertGreaterEqual(largura, len(palavra) + xlsx.FOLGA_DO_FILTRO, (titulo, palavra))
+        self.assertGreaterEqual(larguras[cab.index("Nota")], len("Nota") + 12)
+        self.assertGreaterEqual(larguras[cab.index("Pontos")], len("Pontos") + 12)
+        self.assertGreaterEqual(larguras[cab.index("Status")], len("Status") + 12)
+
+    def test_site_aparece_curto_e_o_link_continua_inteiro(self):
+        self.assertEqual(consulta.site_para_exibir("https://www.exemplo.invalid/"), "exemplo.invalid")
+        self.assertEqual(consulta.site_para_exibir("http://loja.invalid/menu?a=1"), "loja.invalid/menu?a=1")
+        p, _ = exportar([linha(1, title="Com Site", website="https://www.bom.invalid/menu/", phone="(61) 3333-0001")], excluidos=True)
+        col = xlsx.letra_da_coluna(p.cabecalho().index("Site"))
+        self.assertEqual(p.valor("Site", 2)[0], "bom.invalid/menu")
+        self.assertEqual(p.links()[f"{col}2"], "https://www.bom.invalid/menu/")
+
+    def test_site_nao_quebra_linha_e_a_coluna_tem_cerca_de_30(self):
+        """URL sem espaco nao quebra no Google Planilhas: a celula corta o texto e o link completo fica."""
+        xfs = self.p.xml["xl/styles.xml"].findall(".//m:cellXfs/m:xf", NS)
+        self.assertIsNone(xfs[xlsx.ESTILOS["link"]].find("m:alignment", NS).get("wrapText"))
+        cab = self.p.cabecalho()
+        larguras = [float(c.get("width")) for c in self.p.folha.iterfind(".//m:col", NS)]
+        self.assertLessEqual(larguras[cab.index("Site")], 30)
 
     def test_cor_na_letra_da_nota(self):
         notas = {}

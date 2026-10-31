@@ -62,14 +62,26 @@ def letra_da_coluna(indice):
     return nome
 
 
+FOLGA_DO_FILTRO = 12  # o botao do filtro ocupa o canto direito do titulo (Excel e Google Planilhas)
+TITULO_CURTO = 12    # titulo ate aqui cabe inteiro numa linha; os maiores quebram entre as palavras
+
+
+def largura_minima_do_titulo(titulo):
+    """Largura em que o titulo nao e cortado nem quebra no meio da palavra, contando o botao do filtro."""
+    if len(titulo) <= TITULO_CURTO:
+        return len(titulo) + FOLGA_DO_FILTRO
+    return max(len(palavra) for palavra in titulo.split()) + FOLGA_DO_FILTRO
+
+
 def _largura(coluna, valores):
+    minima = largura_minima_do_titulo(coluna.titulo)
     if coluna.largura_fixa:
-        return coluna.largura_fixa
-    maior = len(coluna.titulo) + 3
+        return max(coluna.largura_fixa, minima)
+    maior = max(len(coluna.titulo) + 3, minima)
     for v in valores:
         if isinstance(v, str) and v:
             maior = max(maior, max(len(linha) for linha in v.split("\n")) + 2)
-    return min(maior, coluna.largura_max)
+    return max(min(maior, coluna.largura_max), minima)
 
 
 ESTILOS_XML = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

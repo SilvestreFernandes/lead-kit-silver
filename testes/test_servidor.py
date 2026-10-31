@@ -1226,6 +1226,26 @@ class TestFiltrosRapidosNaApi(Base):
         self.assertEqual(linhas, self.lista("&sem_site=1&celular=1")["total"])
 
 
+class TestExportacaoComExcluidos(Base):
+    def linhas_csv(self, params):
+        r = self.ler("/api/exportar?formato=csv" + params, token=TOKEN)
+        self.assertEqual(r.status, 200)
+        return list(csv.reader(io.StringIO(r.corpo.decode("utf-8").lstrip("﻿"))))[1:]
+
+    def test_por_padrao_exporta_so_o_que_o_painel_mostra(self):
+        exportados = self.linhas_csv("")
+        self.assertEqual(len(exportados), self.ler("/api/leads").json["total"])
+        self.assertNotIn("Fora da lista", [l[0] for l in exportados])
+
+    def test_incluindo_excluidos_eles_vem_no_fim_como_fora_da_lista(self):
+        todos = self.linhas_csv("&excluidos=todos")
+        self.assertGreater(len(todos), len(self.linhas_csv("")))
+        fora = [i for i, l in enumerate(todos) if l[0] == "Fora da lista"]
+        self.assertTrue(fora)
+        self.assertEqual(fora, list(range(len(todos) - len(fora), len(todos))))
+        self.assertTrue(all(todos[i][14] for i in fora))  # coluna "Excluído por" preenchida
+
+
 class TestEtapa4NoServidor(Base):
     com_leads = False
 

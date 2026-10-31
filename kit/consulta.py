@@ -134,6 +134,14 @@ CABECALHO = ["Nota", "Pontos", "Negócio", "Categoria", "Endereço", "Cidade", "
              "Celular provável", "Site", "E-mails", "Avaliações", "Nota no Maps", "Motivos",
              "Excluído por", "Status", "Anotação", "Mensagem editada", "Link"]
 
+FORA_DA_LISTA = "Fora da lista"
+
+
+def excluidos_no_fim(avaliados):
+    """Quem ficou fora da lista vai depois dos demais, na mesma ordem. Nao muda a lista de entrada."""
+    return ([r for r in avaliados if not r["excluido_por"]] + [r for r in avaliados if r["excluido_por"]])
+
+
 PERIGOSOS = ("=", "+", "-", "@", "\t", "\r")
 
 
@@ -172,10 +180,11 @@ def exportar_csv(avaliados):
     saida = io.StringIO()
     escritor = csv.writer(saida, lineterminator="\r\n")
     escritor.writerow(CABECALHO)
-    for r in avaliados:
+    for r in excluidos_no_fim(avaliados):
         l = r["lead"]
+        fora = bool(r["excluido_por"])
         escritor.writerow([
-            r["letra"], r["nota"], proteger(l["nome"]), proteger(l["categoria"]), proteger(l["endereco"]),
+            FORA_DA_LISTA if fora else r["letra"], "" if fora else r["nota"], proteger(l["nome"]), proteger(l["categoria"]), proteger(l["endereco"]),
             proteger(l["cidade"]), l["uf"], telefone_para_csv(l), "sim" if l["celular"] else "não",
             proteger(l["site"]), proteger(", ".join(l["emails"])),
             "" if l["avaliacoes"] is None else l["avaliacoes"],
@@ -254,12 +263,14 @@ def exportar_xlsx(avaliados, perfil):
         xlsx.Coluna("Mensagem", "quebra", 64),
     ]
     linhas = []
-    for r in avaliados:
+    for r in excluidos_no_fim(avaliados):
         l = r["lead"]
         mensagem = mensagem_para_exportar(r, perfil)
         zap = link_whatsapp(l, mensagem)
-        linha = [l["nome"], xlsx.Celula(r["letra"], "nota_" + r["letra"].lower()), r["nota"],
-                 "; ".join(r["motivos"])]
+        fora = bool(r["excluido_por"])
+        # Quem ficou fora da lista nao ganha letra colorida nem pontos: so o aviso, sem cor.
+        nota = xlsx.Celula(FORA_DA_LISTA, "centro") if fora else xlsx.Celula(r["letra"], "nota_" + r["letra"].lower())
+        linha = [l["nome"], nota, "" if fora else r["nota"], "; ".join(r["motivos"])]
         if mostrar_exclusao:
             linha.append(r["excluido_por"] or "")
         linha += [

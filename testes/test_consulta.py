@@ -226,6 +226,24 @@ class TestExportacao(unittest.TestCase):
     def linhas(self):
         return list(csv.reader(io.StringIO(self.texto().lstrip("﻿"))))
 
+    def test_excluidos_no_fim_com_fora_da_lista_no_lugar_da_letra(self):
+        conn, _ = montar([
+            linha(1, title="Sem Telefone", phone="", website=""),
+            linha(2, title="Com Telefone", phone="(61) 99999-0002", website="", review_count="80", review_rating="4.7"),
+            linha(3, title="Outro", phone="(61) 3333-0003"),
+        ])
+        self.addCleanup(conn.close)
+        texto = consulta.exportar_csv(consulta.avaliar(conn, self.perfil))
+        linhas = list(csv.reader(io.StringIO(texto.lstrip("﻿"))))[1:]
+        i_motivo = consulta.CABECALHO.index("Excluído por")
+        fora = [i for i, l in enumerate(linhas) if l[i_motivo]]
+        self.assertEqual(len(fora), 1)
+        self.assertEqual(fora, [len(linhas) - 1])
+        self.assertEqual(linhas[-1][0], "Fora da lista")
+        self.assertEqual(linhas[-1][1], "")
+        for l in linhas[:-1]:
+            self.assertIn(l[0], ("A", "B", "C"))
+
     def test_bom_utf8_e_cabecalho(self):
         t = self.texto()
         self.assertTrue(t.startswith("﻿"))

@@ -205,6 +205,32 @@ class TestAparenciaDeRelatorio(unittest.TestCase):
         self.assertIn("sem telefone", motivos)
 
 
+class TestExcluidosNaPlanilha(unittest.TestCase):
+    def test_por_padrao_a_planilha_nao_tem_excluidos(self):
+        p, avaliados = exportar()
+        self.assertNotIn("Excluído por", p.cabecalho())
+        self.assertNotIn("Fora da lista", [c[0] for c in p.celulas().values()])
+        self.assertTrue(all(not r["excluido_por"] for r in avaliados))
+
+    def test_excluidos_vao_no_fim_sem_letra_e_sem_cor(self):
+        p, avaliados = exportar(excluidos=True)
+        n = len(avaliados) + 1
+        notas = [p.valor("Nota", i) for i in range(2, n + 1)]
+        motivos = [p.valor("Excluído por", i)[0] for i in range(2, n + 1)]
+        fora = [i for i, m in enumerate(motivos) if m]
+        self.assertTrue(fora)
+        # todos os de fora vem depois de todos os da lista
+        self.assertEqual(fora, list(range(len(motivos) - len(fora), len(motivos))))
+        cores = {xlsx.ESTILOS["nota_a"], xlsx.ESTILOS["nota_b"], xlsx.ESTILOS["nota_c"]}
+        for i in fora:
+            self.assertEqual(notas[i][0], "Fora da lista")
+            self.assertNotIn(notas[i][1], cores)  # sem cor de nota
+            self.assertIn(p.valor("Pontos", i + 2)[0], (None, ""))
+        for i in range(len(motivos) - len(fora)):
+            self.assertIn(notas[i][0], ("A", "B", "C"))
+            self.assertIn(notas[i][1], cores)
+
+
 class TestTextoPuroSemFormulas(unittest.TestCase):
     def test_nenhuma_formula_no_arquivo(self):
         perigosos = [

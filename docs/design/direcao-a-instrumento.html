@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Direção A: Instrumento (protótipo)</title>
+<style>
+/* Protótipo estático. Fora do painel de verdade. Sem JavaScript, sem pedido externo.
+   Fontes: IBM Plex Sans e IBM Plex Mono (SIL OFL 1.1), arquivos em ./fontes/ */
+@font-face { font-family: "Plex Sans"; src: url("fontes/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Plex Sans"; src: url("fontes/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Plex Mono"; src: url("fontes/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Plex Mono"; src: url("fontes/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+
+:root {
+  --bg: #E4E7EB; --painel: #F4F5F7; --painel-2: #ECEEF1; --tinta: #15181D; --suave: #555D68; --linha: #C5CBD3;
+  --metal: linear-gradient(180deg, #FAFBFC 0%, #D3D8DF 100%); --metal-borda: #AEB5BF;
+  --botao: #15181D; --botao-texto: #F4F5F7;
+  --bom: #1D7547; --bom-fundo: #D7EBDF; --atencao: #7D5200; --atencao-fundo: #F3E3BF; --ruim: #A02A20;
+  --foco: #1F5FBF;
+  --sans: "Plex Sans", "Segoe UI", system-ui, sans-serif; --mono: "Plex Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0E1013; --painel: #16191D; --painel-2: #1C2025; --tinta: #E8EBEF; --suave: #9CA5B0; --linha: #2B3037;
+    --metal: linear-gradient(180deg, #E9ECEF 0%, #A9B0BA 100%); --metal-borda: #C8CED6;
+    --botao: linear-gradient(180deg, #ECEFF2, #B5BCC6); --botao-texto: #14171B;
+    --bom: #6FD3A0; --bom-fundo: #14301F; --atencao: #EDBB62; --atencao-fundo: #34270F; --ruim: #F08A80;
+    --foco: #8DB8FF;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--tinta); font: 400 16px/1.5 var(--sans); }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+
+.app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+.trilho { background: var(--painel); border-right: 1px solid var(--linha); padding: 22px 16px; display: flex; flex-direction: column; gap: 28px; position: sticky; top: 0; height: 100vh; }
+.marca { display: flex; gap: 12px; align-items: center; }
+.selo { width: 40px; height: 40px; border-radius: 10px; background: var(--metal); border: 1px solid var(--metal-borda); display: grid; place-items: center; font: 500 13px var(--mono); color: #15181D; }
+.marca b { display: block; font-weight: 600; line-height: 1.2; }
+.marca small { color: var(--suave); font-size: 13px; }
+.trilho nav { display: grid; gap: 4px; }
+.trilho nav a { display: flex; justify-content: space-between; align-items: center; padding: 11px 12px; border-radius: 10px; text-decoration: none; color: var(--suave); font-weight: 600; min-height: 44px; border: 1px solid transparent; }
+.trilho nav a:hover { color: var(--tinta); background: var(--painel-2); }
+.trilho nav a[aria-current="page"] { color: var(--tinta); background: var(--painel-2); border-color: var(--linha); box-shadow: inset 3px 0 0 var(--metal-borda); }
+.contagem { font: 500 12px var(--mono); background: var(--bg); border: 1px solid var(--linha); border-radius: 6px; padding: 1px 7px; }
+.motor { margin-top: auto; border: 1px solid var(--linha); border-radius: 12px; padding: 12px 14px; background: var(--painel-2); display: grid; gap: 4px; font-size: 14px; }
+.motor .led { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--bom); margin-right: 8px; }
+.motor small { color: var(--suave); }
+
+main { padding: 36px clamp(20px, 4vw, 48px) 80px; min-width: 0; }
+main > section { display: none; }
+main > section:target, main:not(:has(:target)) > #leads { display: block; }
+h1 { font: 600 30px/1.15 var(--sans); margin: 0 0 6px; letter-spacing: -0.01em; }
+.sub { color: var(--suave); margin: 0 0 26px; max-width: 62ch; }
+.rotulo { font: 500 11.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--suave); }
+.cartao { background: var(--painel); border: 1px solid var(--linha); border-radius: 14px; }
+.btn { font: 600 15px var(--sans); min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--linha); background: var(--painel); color: var(--tinta); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+.btn.primario { background: var(--botao); color: var(--botao-texto); border-color: var(--metal-borda); }
+.chip { font: 600 14px var(--sans); min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--linha); background: var(--painel); color: var(--tinta); display: inline-flex; align-items: center; gap: 8px; }
+.chip[aria-pressed="true"] { background: var(--tinta); color: var(--painel); }
+.chip i { font: 500 12px var(--mono); font-style: normal; opacity: 0.75; }
+.barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 18px; }
+.barra .direita { margin-left: auto; display: flex; gap: 8px; }
+
+/* Leads: tabela com a nota como instrumento */
+.leads { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--linha); }
+td { padding: 14px; border-bottom: 1px solid var(--linha); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+tr.ativa td { background: var(--painel-2); }
+tr.ativa td:first-child { box-shadow: inset 3px 0 0 var(--metal-borda); }
+.nota { display: inline-flex; align-items: baseline; gap: 6px; font-family: var(--mono); white-space: nowrap; }
+.nota b { font: 500 26px/1 var(--mono); }
+.nota span { color: var(--suave); font-size: 13px; }
+.nota.A b { color: var(--bom); } .nota.B b { color: var(--atencao); } .nota.C b { color: var(--suave); }
+.nome b { display: block; font-weight: 600; } .nome small { color: var(--suave); }
+.porque { color: var(--suave); font-size: 15px; min-width: 18ch; }
+.tel { display: block; font: 400 13.5px var(--mono); white-space: nowrap; color: var(--suave); margin-top: 2px; }
+.estado { font-size: 14px; color: var(--suave); }
+
+.gaveta { padding: 22px; display: grid; gap: 16px; position: sticky; top: 20px; }
+.gaveta h2 { font: 600 20px/1.2 var(--sans); margin: 0; }
+.pontos { display: grid; gap: 0; border: 1px solid var(--linha); border-radius: 10px; overflow: hidden; }
+.pontos div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--linha); font-size: 15px; }
+.pontos div:last-child { border-bottom: 0; background: var(--painel-2); font-weight: 600; }
+.pontos b { font: 500 14px var(--mono); }
+.mensagem { background: var(--painel-2); border: 1px solid var(--linha); border-radius: 10px; padding: 14px; font-size: 15.5px; }
+.acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Buscar */
+.duas { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.progresso { padding: 22px 24px; margin-bottom: 20px; display: grid; gap: 14px; }
+.segmentos { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.segmentos i { height: 8px; border-radius: 4px; background: var(--linha); }
+.segmentos i.feito { background: var(--metal); border: 1px solid var(--metal-borda); }
+.segmentos i.agora { background: var(--painel-2); border: 1px solid var(--metal-borda); }
+.progresso h2 { font: 600 20px var(--sans); margin: 0; }
+.campo { padding: 22px 24px; border-bottom: 1px solid var(--linha); display: grid; gap: 8px; }
+.campo:last-child { border-bottom: 0; }
+.campo label, .campo .rotulo-campo { font-weight: 600; }
+input[type="text"], select, textarea { font: 400 16px var(--sans); min-height: 44px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--linha); background: var(--bg); color: var(--tinta); width: 100%; }
+textarea { min-height: 96px; }
+.dica { color: var(--suave); font-size: 14px; margin: 0; }
+.opcoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.opcao { border: 1px solid var(--linha); border-radius: 10px; padding: 12px 14px; display: grid; gap: 2px; background: var(--bg); }
+.opcao[aria-checked="true"] { border-color: var(--metal-borda); box-shadow: inset 0 0 0 1px var(--metal-borda); background: var(--painel); }
+.opcao small { color: var(--suave); font: 400 13px var(--mono); }
+.opcao.fora { opacity: 0.55; border-style: dashed; }
+.resumo { padding: 22px; display: grid; gap: 14px; }
+.resumo dl { margin: 0; display: grid; gap: 12px; } .resumo dd { margin: 2px 0 0; font-weight: 600; }
+
+/* Oferta */
+.regra { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--linha); }
+.regra:last-child { border-bottom: 0; }
+.regra b { display: block; font-weight: 600; } .regra small { color: var(--suave); font-size: 14px; }
+.peso { display: inline-grid; grid-template-columns: 44px 52px 44px; border: 1px solid var(--linha); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.peso button { font: 600 18px var(--sans); border: 0; background: var(--painel); color: var(--tinta); min-height: 44px; }
+.peso output { display: grid; place-items: center; font: 500 18px var(--mono); }
+.regra.desligada { opacity: 0.55; }
+.salvar { position: sticky; bottom: 16px; margin-top: 20px; padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; box-shadow: 0 10px 30px rgba(0,0,0,0.18); }
+.salvar p { margin: 0; font-weight: 600; }
+
+@media (max-width: 1080px) { .leads, .duas { grid-template-columns: minmax(0, 1fr); } .gaveta { position: static; } }
+@media (max-width: 760px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .trilho { position: static; height: auto; flex-direction: row; flex-wrap: wrap; padding: 12px 16px; gap: 12px; align-items: center; }
+  .trilho nav { grid-auto-flow: column; } .motor { margin: 0; }
+  .opcoes { grid-template-columns: minmax(0, 1fr); }
+  table, thead, tbody, tr, td { display: block; } thead { display: none; }
+  td { border: 0; padding: 4px 14px; } tr { padding: 12px 0; border-bottom: 1px solid var(--linha); }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="trilho">
+    <div class="marca"><div class="selo" aria-hidden="true">LK</div><div><b>Lead Kit Silver</b><small>Prospecção local</small></div></div>
+    <nav aria-label="Telas">
+      <a href="#buscar">Buscar</a>
+      <a href="#leads" aria-current="page">Leads <span class="contagem">6</span></a>
+      <a href="#oferta">Minha oferta</a>
+    </nav>
+    <div class="motor" role="status"><span><span class="led" aria-hidden="true"></span><b>Motor ligado</b></span><small>Tudo roda neste computador.</small></div>
+  </aside>
+
+  <main>
+    <!-- ============ LEADS ============ -->
+    <section id="leads" aria-labelledby="t-leads">
+      <h1 id="t-leads">Leads</h1>
+      <p class="sub">6 negócios. Clique em um para ver por que ele recebeu a nota e a mensagem pronta.</p>
+      <div class="barra">
+        <button class="chip" aria-pressed="true">Todos <i>6</i></button>
+        <button class="chip" aria-pressed="false">Nota A <i>2</i></button>
+        <button class="chip" aria-pressed="false">Nota B <i>2</i></button>
+        <button class="chip" aria-pressed="false">Nota C <i>2</i></button>
+        <button class="chip" aria-pressed="false">Sem site</button>
+        <button class="chip" aria-pressed="false">Com celular</button>
+        <div class="direita"><a class="btn primario" href="#leads">Baixar planilha</a><a class="btn" href="#leads">CSV</a></div>
+      </div>
+      <div class="leads">
+        <div class="cartao" style="overflow:auto">
+          <table>
+            <thead><tr><th class="rotulo">Nota</th><th class="rotulo">Negócio</th><th class="rotulo">Por quê</th><th class="rotulo">Situação</th></tr></thead>
+            <tbody>
+              <tr class="ativa"><td><span class="nota A"><b>A</b><span>8 pts</span></span></td><td class="nome"><b>Padaria Pão Quente</b><small>Padaria, Sobradinho</small><span class="tel">(61) 99322-4592</span></td><td class="porque">Não tem site, tem celular e 312 avaliações.</td><td class="estado">Novo</td></tr>
+              <tr><td><span class="nota A"><b>A</b><span>7 pts</span></span></td><td class="nome"><b>Café Estação</b><small>Cafeteria, Asa Norte</small><span class="tel">(61) 98402-5588</span></td><td class="porque">O site é só uma rede social e tem celular.</td><td class="estado">Novo</td></tr>
+              <tr><td><span class="nota B"><b>B</b><span>5 pts</span></span></td><td class="nome"><b>Doces da Vovó</b><small>Confeitaria, Sobradinho</small><span class="tel">(61) 99839-7221</span></td><td class="porque">Não tem site e tem celular.</td><td class="estado">Contatado</td></tr>
+              <tr><td><span class="nota B"><b>B</b><span>5 pts</span></span></td><td class="nome"><b>Mercadinho Boa Praça</b><small>Mercearia, Brasília</small><span class="tel">(61) 99111-0006</span></td><td class="porque">Nota alta e muitas avaliações.</td><td class="estado">Novo</td></tr>
+              <tr><td><span class="nota C"><b>C</b><span>3 pts</span></span></td><td class="nome"><b>Pizzaria Forno a Lenha</b><small>Pizzaria, Brasília</small><span class="tel">(61) 3453-5030</span></td><td class="porque">Nota alta e muitas avaliações.</td><td class="estado">Novo</td></tr>
+              <tr><td><span class="nota C"><b>C</b><span>1 pt</span></span></td><td class="nome"><b>Empório da Serra</b><small>Mercearia, Sobradinho</small><span class="tel">(61) 3387-2235</span></td><td class="porque">Nota alta.</td><td class="estado">Novo</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <aside class="cartao gaveta" aria-label="Detalhe do negócio">
+          <div><span class="rotulo">Negócio selecionado</span><h2>Padaria Pão Quente</h2></div>
+          <div class="pontos" aria-label="Como a nota foi calculada">
+            <div><span>Não tem site</span><b>+3</b></div>
+            <div><span>Nota alta no Google</span><b>+2</b></div>
+            <div><span>Muitas avaliações</span><b>+1</b></div>
+            <div><span>Telefone parece celular</span><b>+2</b></div>
+            <div><span>Total, nota A</span><b>8</b></div>
+          </div>
+          <div><span class="rotulo">Mensagem pronta</span></div>
+          <div class="mensagem">Oi, Padaria Pão Quente! Aqui é Ana, do Estúdio Exemplo. Notei que não achei um site no perfil de vocês no Google Maps. Posso mandar uma ideia rápida? Se não fizer sentido, é só avisar que não escrevo mais.</div>
+          <div class="acoes"><a class="btn primario" href="#leads">Abrir no WhatsApp</a><a class="btn" href="#leads">Copiar</a></div>
+          <p class="dica">O envio é sempre manual, um negócio por vez.</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ BUSCAR ============ -->
+    <section id="buscar" aria-labelledby="t-buscar">
+      <h1 id="t-buscar">Buscar</h1>
+      <p class="sub">Escolha o tipo de negócio e a cidade. O painel busca no Google Maps e dá a nota.</p>
+      <div class="cartao progresso" role="status">
+        <span class="rotulo">Busca em andamento</span>
+        <h2>Padaria em Brasília-DF, tamanho médio</h2>
+        <div class="segmentos" aria-hidden="true"><i class="feito"></i><i class="feito"></i><i class="agora"></i><i></i><i></i></div>
+        <p class="dica" style="margin:0">Ponto 3 de 5 · 2 min 10 s · A busca termina sozinha. Se fechar esta página, ela continua.</p>
+      </div>
+      <div class="duas">
+        <div class="cartao">
+          <div class="campo"><label for="a-tipo">Tipo de negócio</label><input id="a-tipo" type="text" placeholder="Exemplo: padaria"><div class="barra" style="margin:0"><span class="chip">padaria</span><span class="chip">restaurante</span><span class="chip">academia</span></div></div>
+          <div class="campo"><span class="rotulo-campo">Onde</span><div style="display:grid;grid-template-columns:110px 1fr;gap:10px"><select aria-label="Estado"><option>DF</option></select><input type="text" value="Brasília" aria-label="Cidade"></div><p class="dica">A busca cobre cerca de 10 km ao redor do centro da cidade.</p></div>
+          <div class="campo"><span class="rotulo-campo">Tamanho da busca</span>
+            <div class="opcoes" role="radiogroup" aria-label="Tamanho"><div class="opcao" role="radio" aria-checked="false"><b>Rápida</b><small>cerca de 1 minuto</small></div><div class="opcao" role="radio" aria-checked="true"><b>Média</b><small>cerca de 5 a 6 minutos</small></div><div class="opcao fora" role="radio" aria-checked="false" aria-disabled="true"><b>Ampla</b><small>em breve</small></div></div>
+            <p class="dica">Os tempos são estimativas. O resultado depende da cidade e do tipo de negócio, e o kit não promete uma quantidade.</p></div>
+        </div>
+        <aside class="cartao resumo"><span class="rotulo">Resumo</span>
+          <dl><div><span class="rotulo">Busca</span><dd>padaria</dd></div><div><span class="rotulo">Local</span><dd>Brasília, DF</dd></div><div><span class="rotulo">Tamanho</span><dd>Média, cerca de 5 a 6 minutos</dd></div></dl>
+          <a class="btn primario" href="#buscar" aria-disabled="true" style="justify-content:center">Buscar leads</a>
+          <p class="dica">Só o nome da cidade e o estado vão para o serviço de localização OpenStreetMap. Leads, notas e mensagens ficam só no seu computador.</p></aside>
+      </div>
+    </section>
+
+    <!-- ============ MINHA OFERTA ============ -->
+    <section id="oferta" aria-labelledby="t-oferta">
+      <h1 id="t-oferta">Minha oferta</h1>
+      <p class="sub">Conte o que você vende e como prefere falar. É com isso que o painel dá nota e escreve as mensagens.</p>
+      <div class="cartao" style="margin-bottom:20px">
+        <div class="campo"><label for="a-oferta">O que você vende, em uma frase</label><textarea id="a-oferta">Sites e automações com IA para negócios locais</textarea></div>
+        <div class="campo"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div><label for="a-nome" style="font-weight:600">Seu nome</label><input id="a-nome" type="text" value="Ana"></div><div><label for="a-emp" style="font-weight:600">Sua empresa</label><input id="a-emp" type="text" value="Estúdio Exemplo"></div></div></div>
+      </div>
+      <div class="cartao">
+        <div class="campo" style="border-bottom:1px solid var(--linha)"><span class="rotulo">O que faz um negócio ser um bom lead</span><p class="dica">Cada coisa vale pontos. Use os botões para aumentar ou diminuir. Zero tira da conta.</p></div>
+        <div class="regra"><div><b>Não tem site</b><small>O perfil no Google Maps não tem site.</small></div><div class="peso" role="group" aria-label="Pontos: não tem site"><button aria-label="Diminuir">−</button><output>3</output><button aria-label="Aumentar">+</button></div></div>
+        <div class="regra"><div><b>Site é só rede social</b><small>O site do perfil é só uma página do Instagram ou do Facebook.</small></div><div class="peso" role="group" aria-label="Pontos: rede social"><button aria-label="Diminuir">−</button><output>2</output><button aria-label="Aumentar">+</button></div></div>
+        <div class="regra"><div><b>Nota alta</b><small>4,5 ou mais no Google Maps.</small></div><div class="peso" role="group" aria-label="Pontos: nota alta"><button aria-label="Diminuir">−</button><output>2</output><button aria-label="Aumentar">+</button></div></div>
+        <div class="regra desligada"><div><b>Poucas avaliações</b><small>Menos de 15 avaliações.</small></div><div class="peso" role="group" aria-label="Pontos: poucas avaliações"><button aria-label="Diminuir">−</button><output>0</output><button aria-label="Aumentar">+</button></div></div>
+        <div class="regra"><div><b>Telefone parece celular</b><small>Provavelmente tem WhatsApp.</small></div><div class="peso" role="group" aria-label="Pontos: celular"><button aria-label="Diminuir">−</button><output>2</output><button aria-label="Aumentar">+</button></div></div>
+      </div>
+      <div class="cartao salvar"><p>Você tem mudanças que ainda não foram salvas.</p><div class="acoes"><a class="btn" href="#oferta">Descartar</a><a class="btn primario" href="#oferta">Salvar e dar nota de novo</a></div></div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

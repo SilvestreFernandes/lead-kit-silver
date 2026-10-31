@@ -6,3 +6,7 @@ __pycache__/
 *.csv
 .playwright-mcp/
 prints/
+
+# Ferramentas de desenvolvimento (fora do produto): Impeccable e agentes do Claude Code
+.claude/
+.impeccable/

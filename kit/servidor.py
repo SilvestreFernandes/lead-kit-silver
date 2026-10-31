@@ -130,7 +130,15 @@ def rota_perfil_ler(srv, params, consulta_, corpo):
     return 200, {"perfil": perfil, "erros": erros, "avisos": avisos}
 
 
+MENSAGEM_BUSCA_EM_ANDAMENTO = ("Tem uma busca em andamento. Espere ela terminar para salvar o perfil, "
+                               "assim todos os leads dela recebem a nota com as mesmas regras.")
+
+
 def rota_perfil_gravar(srv, params, consulta_, corpo):
+    # A busca usa o perfil que existia quando comecou. Trocar o perfil no meio deixaria leads da mesma busca
+    # com notas de regras diferentes. O jeito mais simples e seguro e esperar a busca acabar.
+    if srv.busca_ativa is not None:
+        raise Erro(409, MENSAGEM_BUSCA_EM_ANDAMENTO, busca_em_andamento=srv.busca_ativa)
     perfil, erros, avisos = validar_perfil.validar(corpo)
     if erros:
         raise Erro(422, "O perfil tem problemas e não foi salvo.", erros=erros)
@@ -216,6 +224,8 @@ def rota_lead_alterar(srv, params, consulta_, corpo):
 
 
 def rota_reavaliar(srv, params, consulta_, corpo):
+    if srv.busca_ativa is not None:
+        raise Erro(409, MENSAGEM_BUSCA_EM_ANDAMENTO, busca_em_andamento=srv.busca_ativa)
     perfil = _perfil_valido(srv)
     with srv.banco() as conn:
         avaliados = consulta.avaliar(conn, perfil)

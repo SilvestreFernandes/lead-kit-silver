@@ -256,6 +256,10 @@ Regras da tela Minha oferta (fase 3):
 - **Mensagens:** uma por canal (WhatsApp e e-mail), com botões que incluem os marcadores e uma prévia com um negócio de exemplo. Vazio quer dizer "usar o modelo padrão". O servidor exige a saída clara ("é só avisar que não escrevo mais") e mostra o erro em português.
 - **Não perde o que a pessoa fez:** o que foi editado e não foi salvo continua ao trocar de aba (enquanto a página estiver aberta), a página avisa antes de fechar com mudanças e há "Descartar mudanças". Erros aparecem no campo e num resumo no topo, e nada é enviado se faltar campo obrigatório.
 - **Perfil com problemas:** a tela abre mesmo assim, mostra o que o servidor achou e deixa corrigir.
+- **Salvar durante uma busca:** o servidor recusa (`409`, com o id da busca) o `PUT /api/perfil` e o `POST /api/leads/reavaliar` enquanto houver busca em andamento, e a tela mostra "Tem uma busca em andamento. Espere ela terminar para salvar o perfil...". Motivo: a busca usa o perfil de quando começou, e trocar no meio deixaria leads da mesma busca com notas de regras diferentes. Esperar é o jeito mais simples e seguro. Há teste: nada é gravado durante a busca e, depois dela, salvar funciona.
+- **Tempo de recalcular:** medido com 5000 leads fictícios, `POST /api/leads/reavaliar` levou cerca de 0,2 s e `PUT /api/perfil` cerca de 0,01 s (Windows, Python 3.13). Como é bem menos que 2 s, a tela só mostra "Salvando e dando nota de novo..." na barra de baixo, sem tela de espera à parte.
+- **Pesos e cortes são provisórios.** Os pesos padrão de `regras.json` (sem_site 3, so_instagram 2, nota_alta 2, nota_baixa 2, muitas_avaliacoes 1, poucas_avaliacoes 1, celular 2, delivery 1, reserva 1, sem_email 1) e os cortes de 70% e 40% ficam como estão até a fase 5, que valida com 3 perfis de teste.
+- **Acessibilidade com leitor de tela NÃO foi testada.** O painel usa rótulos, `role` e avisos para leitor de tela, mas ninguém abriu a tela com NVDA, Narrador ou outro. Enquanto esse teste não for feito, **nenhum texto de venda, guia ou página pode afirmar que o painel é acessível.** O que existe é só marcação feita com cuidado.
 
 Regras da tela de Leads (fase 3):
 

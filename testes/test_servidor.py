@@ -749,6 +749,44 @@ class TestBuscas(Base):
                 self.assertEqual(self.criar(**mudancas).status, 400)
         self.assertEqual(self.motor.pedidos, [])
 
+    def test_perfil_nao_e_salvo_enquanto_uma_busca_esta_em_andamento(self):
+        antes = (self.dados / "perfil.json").read_text(encoding="utf-8")
+        self.motor.segurar = threading.Event()
+        busca = self.criar().json["id"]
+        novo = perfil_ficticio()
+        novo["negocio"]["oferta"] = "Outra oferta durante a busca"
+        r = self.escrever("PUT", "/api/perfil", novo)
+        self.assertEqual(r.status, 409)
+        self.assertIn("Espere ela terminar", r.json["erro"])
+        self.assertEqual(r.json["busca_em_andamento"], busca)
+        self.assertEqual(self.escrever("POST", "/api/leads/reavaliar").status, 409)
+        self.assertEqual((self.dados / "perfil.json").read_text(encoding="utf-8"), antes)  # nada mudou
+        self.assertFalse((self.dados / "perfil.anterior.json").exists())
+        self.motor.segurar.set()
+        self.esperar_busca(busca)
+        # terminou a busca: agora salva, e os leads dela recebem a nota do perfil novo
+        self.assertEqual(self.escrever("PUT", "/api/perfil", novo).status, 200)
+        self.assertEqual(self.escrever("POST", "/api/leads/reavaliar").status, 200)
+
+    def test_todos_os_leads_de_uma_busca_usam_o_mesmo_perfil(self):
+        self.motor.segurar = threading.Event()
+        busca = self.criar().json["id"]
+        self.escrever("PUT", "/api/perfil", perfil_ficticio())  # recusado
+        self.motor.segurar.set()
+        self.esperar_busca(busca)
+        leads = self.ler("/api/leads").json["leads"]
+        self.assertTrue(leads)
+
+    def test_erro_de_mensagem_chama_o_canal_pelo_nome_certo(self):
+        p = perfil_ficticio()
+        p["mensagens"] = {"whatsapp": "Oi {nome}", "email": "Olá {apelido}. Se não fizer sentido, é só avisar que não escrevo mais."}
+        r = self.escrever("PUT", "/api/perfil", p)
+        self.assertEqual(r.status, 422)
+        texto = " ".join(r.json["erros"])
+        self.assertIn("A mensagem de WhatsApp precisa", texto)
+        self.assertIn("A mensagem de e-mail usa o marcador inválido {apelido}", texto)
+        self.assertNotIn("de whatsapp", texto)
+
     def test_perfil_invalido_da_409_e_nao_cria_busca(self):
         (self.dados / "perfil.json").unlink()
         self.assertEqual(self.criar().status, 409)

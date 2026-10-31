@@ -9,6 +9,7 @@ ESQUEMA = json.loads((RAIZ / "entrevista" / "esquema.json").read_text(encoding="
 REGRAS = json.loads((RAIZ / "kit" / "regras.json").read_text(encoding="utf-8"))
 
 MARCADOR = re.compile(r"\{([^{}]*)\}")
+NOMES_DE_CANAL = {"whatsapp": "WhatsApp", "email": "e-mail", "ligacao": "ligação", "visita": "visita"}
 SAIDA = re.compile(
     r"(n[ãa]o escrevo mais|n[ãa]o (te )?(escrevo|envio|mando)|se n[ãa]o fizer sentido"
     r"|[ée] s[óo] avisar|pode pedir pra eu parar|parar de receber)", re.I)
@@ -92,7 +93,8 @@ def validar(perfil):
         pont.pop("corte_a", None)
         pont.pop("corte_b", None)
 
-    for nome, modelo in (perfil.get("mensagens") or {}).items():
+    for canal, modelo in (perfil.get("mensagens") or {}).items():
+        nome = NOMES_DE_CANAL.get(canal, canal)
         for marcador in MARCADOR.findall(modelo):
             if marcador not in ESQUEMA["marcadores"]:
                 erros.append(f"A mensagem de {nome} usa o marcador inválido {{{marcador}}}.")

@@ -94,6 +94,20 @@ class TestGeocodificar(unittest.TestCase):
             gc.buscar("Cidade Teste", "DF")
         self.assertIn("internet", str(e.exception))
 
+    def test_servico_que_bloqueia_ou_cai_vira_mensagem_simples_e_nao_vai_para_o_cache(self):
+        for codigo, trecho in ((429, "esperar"), (403, "esperar"), (503, "com problema")):
+            erro = urllib.error.HTTPError("https://x.invalid", codigo, "x", {}, None)
+            gc, falso, _, _ = geo(erro)
+            with self.assertRaises(g.ErroGeocodificacao) as e:
+                gc.buscar("Cidade Teste", "DF")
+            self.assertIn(trecho, str(e.exception), codigo)
+            self.assertNotIn("Traceback", str(e.exception))
+
+    def test_atribuicao_ao_openstreetmap_no_creditos(self):
+        creditos = (Path(g.__file__).resolve().parent.parent / "CREDITS.md").read_text(encoding="utf-8")
+        self.assertIn("OpenStreetMap contributors", creditos)
+        self.assertIn("ODbL", creditos)
+
     def test_resposta_estranha(self):
         gc, _, _, _ = geo("<html>erro</html>")
         with self.assertRaises(g.ErroGeocodificacao):

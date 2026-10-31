@@ -5,7 +5,7 @@ from pathlib import Path
 
 from kit import banco, buscar
 from kit import motor as m
-from kit.geocodificar import ErroGeocodificacao
+from kit.geocodificar import CidadeNaoEncontrada, ErroGeocodificacao
 from testes.fixtures import GeoDeMentira, MotorDeMentira, csv_texto, linha, perfil_ficticio
 
 
@@ -134,7 +134,7 @@ class TestBuscar(unittest.TestCase):
         bid = buscar.iniciar_busca(conn, "padaria", "Cidade Teste", "DF", "rapida", False)
         etapas = []
         buscar.executar_busca(conn, bid, perfil_ficticio(), MotorDeMentira(), GeoDeMentira(),
-                              lambda etapa, seg=None: etapas.append(etapa))
+                              lambda etapa, seg=None, *_: etapas.append(etapa))
         sem_repeticao = [e for i, e in enumerate(etapas) if i == 0 or e != etapas[i - 1]]
         self.assertEqual(sem_repeticao, ["Achando a cidade no mapa", "Enviando a busca ao motor",
                                          "Esperando o motor", "Lendo os resultados",
@@ -181,7 +181,7 @@ class TestBuscaMedia(unittest.TestCase):
         try:
             resultado = buscar.executar_busca(
                 self.conn, bid, perfil_ficticio(), motor, GeoDeMentira(),
-                lambda etapa, seg=None: self.etapas.append(etapa), dormir=self.pausas.append)
+                lambda etapa, seg=None, *_: self.etapas.append(etapa), dormir=self.pausas.append)
         finally:
             self.busca_id = bid
         return resultado
@@ -256,6 +256,119 @@ class TestBuscaMedia(unittest.TestCase):
         self.assertEqual(m.TAMANHOS_EM_BREVE, ("ampla",))
         with self.assertRaises(SystemExit):
             buscar.ler_argumentos(["--categoria", "x", "--cidade", "y", "--uf", "DF", "--tamanho", "ampla"])
+
+
+class TestContagensEErrosDaBusca(unittest.TestCase):
+    """Ao fim: quantos novos, quantos ja existiam e quantos ficaram fora da lista. E o tipo de cada erro."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._tmp.cleanup)
+        self.conn = banco.abrir(str(Path(self._tmp.name) / "leads.db"))
+        self.addCleanup(self.conn.close)
+        self.perfil = perfil_ficticio()
+
+    def busca(self, motor, geo=None, tamanho="rapida", tratar=True):
+        bid = buscar.iniciar_busca(self.conn, "padaria", "Cidade Teste", "DF", tamanho, False)
+        self.bid = bid
+        try:
+            return buscar.executar_busca(self.conn, bid, self.perfil, motor, geo or GeoDeMentira(),
+                                         dormir=lambda s: None)
+        except Exception:
+            if not tratar:
+                raise
+            return None
+
+    def dados(self):
+        return banco.obter_busca(self.conn, self.bid)
+
+    def test_primeira_busca_tudo_novo_e_os_excluidos_contados(self):
+        r = self.busca(MotorDeMentira())
+        d = self.dados()
+        self.assertEqual((d["total_leads"], d["novos"], d["ja_existiam"]), (11, 11, 0))
+        self.assertEqual(d["fora_da_lista"], 4)  # sem telefone + 3 unidades da mesma rede
+        self.assertEqual((r["novos"], r["ja_existiam"], r["fora_da_lista"]), (11, 0, 4))
+        self.assertEqual((d["status"], d["erro"], d["erro_tipo"]), ("ok", None, None))
+        self.assertTrue(d["terminou_em"])
+
+    def test_repetir_a_mesma_busca_nao_traz_nada_novo(self):
+        self.busca(MotorDeMentira())
+        self.busca(MotorDeMentira())
+        d = self.dados()
+        self.assertEqual((d["total_leads"], d["novos"], d["ja_existiam"]), (11, 0, 11))
+
+    def test_mistura_de_novos_e_ja_existentes(self):
+        self.busca(MotorDeMentira(csv=csv_do_ponto(1, 2, 3, 4, 5)))
+        self.busca(MotorDeMentira(csv=csv_do_ponto(4, 5, 6, 7)))
+        d = self.dados()
+        self.assertEqual((d["total_leads"], d["novos"], d["ja_existiam"]), (4, 2, 2))
+
+    def test_na_media_o_mesmo_negocio_em_dois_pontos_conta_uma_vez(self):
+        csvs = [csv_do_ponto(*range(a, a + 4)) for a in (1, 3, 5, 7, 9)]  # 12 unicos, 20 linhas
+        self.busca(MotorDeMentira(csv=csvs), tamanho="media")
+        d = self.dados()
+        self.assertEqual((d["total_leads"], d["novos"], d["ja_existiam"]), (12, 12, 0))
+
+    def test_resultado_zero_termina_ok_sem_erro_e_com_zeros(self):
+        r = self.busca(MotorDeMentira(csv=csv_texto([])))
+        d = self.dados()
+        self.assertEqual((d["status"], d["total_leads"], d["novos"], d["ja_existiam"], d["fora_da_lista"]),
+                         ("ok", 0, 0, 0, 0))
+        self.assertIsNone(d["erro"])
+        self.assertEqual(r["achados"], [])
+
+    def test_tipo_do_erro_em_cada_caso(self):
+        casos = [
+            ("cidade", dict(geo=GeoDeMentira(CidadeNaoEncontrada("Não achei a cidade X-DF.")))),
+            ("servico_de_mapas", dict(geo=GeoDeMentira(ErroGeocodificacao("Sem internet.")))),
+            ("motor", dict(motor=MotorDeMentira(falha=m.ErroMotor("sem resposta")))),
+            ("formato", dict(motor=MotorDeMentira(csv="a,b\n1,2\n"))),
+            ("inesperado", dict(motor=MotorDeMentira(falha=RuntimeError("quebrou")))),
+        ]
+        for tipo, kw in casos:
+            with self.subTest(tipo=tipo):
+                self.busca(kw.pop("motor", None) or MotorDeMentira(), **kw)
+                d = self.dados()
+                self.assertEqual((d["status"], d["erro_tipo"]), ("erro", tipo))
+                self.assertTrue(d["erro"])
+                self.assertTrue(d["terminou_em"])
+                self.assertEqual((d["total_leads"], d["novos"]), (0, 0))
+
+    def test_falha_no_meio_e_parcial_com_o_que_foi_salvo(self):
+        csvs = [csv_do_ponto(*range(a, a + 4)) for a in (1, 3, 5, 7, 9)]
+        motor = MotorDeMentira(csv=csvs, falha_a_partir_do_job=(3, m.ErroMotor("sem resposta")))
+        with self.assertRaises(buscar.ErroBuscaParcial) as e:
+            self.busca(motor, tamanho="media", tratar=False)
+        self.assertEqual(e.exception.salvos, 6)
+        self.assertIsInstance(e.exception, m.ErroMotor)
+        d = self.dados()
+        self.assertEqual((d["status"], d["erro_tipo"], d["total_leads"], d["novos"]), ("erro", "parcial", 6, 6))
+
+    def test_tipo_do_erro_funcao(self):
+        from kit import limpeza as lp
+        self.assertEqual(buscar.tipo_do_erro(buscar.ErroBuscaParcial("x", 1)), "parcial")
+        self.assertEqual(buscar.tipo_do_erro(CidadeNaoEncontrada("x")), "cidade")
+        self.assertEqual(buscar.tipo_do_erro(ErroGeocodificacao("x")), "servico_de_mapas")
+        self.assertEqual(buscar.tipo_do_erro(lp.ErroCSV("x")), "formato")
+        self.assertEqual(buscar.tipo_do_erro(m.ErroMotor("x")), "motor")
+        self.assertEqual(buscar.tipo_do_erro(ValueError("x")), "inesperado")
+
+    def test_progresso_traz_o_ponto_atual_e_o_total(self):
+        visto = []
+        bid = buscar.iniciar_busca(self.conn, "padaria", "Cidade Teste", "DF", "media", False)
+        csvs = [csv_do_ponto(*range(a, a + 4)) for a in (1, 3, 5, 7, 9)]
+        buscar.executar_busca(self.conn, bid, self.perfil, MotorDeMentira(csv=csvs), GeoDeMentira(),
+                              lambda etapa, seg=None, ponto=None, pontos=None: visto.append((etapa, ponto, pontos)),
+                              dormir=lambda s: None)
+        self.assertEqual(visto[0], ("Achando a cidade no mapa", 0, 5))
+        esperando = [v for v in visto if v[0].startswith("Esperando o motor")]
+        self.assertEqual([p for _, p, _ in esperando], [1, 2, 3, 4, 5])
+        self.assertTrue(all(total == 5 for _, _, total in visto[1:]))
+        rapida = []
+        bid = buscar.iniciar_busca(self.conn, "padaria", "Cidade Teste", "DF", "rapida", False)
+        buscar.executar_busca(self.conn, bid, self.perfil, MotorDeMentira(), GeoDeMentira(),
+                              lambda etapa, seg=None, ponto=None, pontos=None: rapida.append((ponto, pontos)))
+        self.assertEqual(rapida[-1], (1, 1))
 
 
 if __name__ == "__main__":

@@ -3,53 +3,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-class FakeNode {}
-class FakeText extends FakeNode {
-  constructor(dados) { super(); this.nodeType = 3; this.dados = String(dados); }
-  get textContent() { return this.dados; }
-}
-class FakeElement extends FakeNode {
-  constructor(tag) {
-    super();
-    this.nodeType = 1;
-    this.tagName = tag.toUpperCase();
-    this.children = [];
-    this.attributes = {};
-    this.dataset = {};
-    this.ouvintes = {};
-    this.className = '';
-  }
-  setAttribute(nome, valor) { this.attributes[nome] = String(valor); if (nome === 'class') this.className = String(valor); }
-  getAttribute(nome) { return this.attributes[nome] ?? null; }
-  removeAttribute(nome) { delete this.attributes[nome]; }
-  append(...nos) {
-    for (const no of nos) {
-      assert.ok(no instanceof FakeNode, 'append recebeu algo que não é um nó: ' + typeof no);
-      this.children.push(no);
-    }
-  }
-  addEventListener(tipo, fn) { (this.ouvintes[tipo] ||= []).push(fn); }
-  get firstChild() { return this.children[0] ?? null; }
-  removeChild(no) { this.children.splice(this.children.indexOf(no), 1); }
-  get textContent() { return this.children.map((c) => c.textContent).join(''); }
-}
-globalThis.Node = FakeNode;
-globalThis.document = {
-  createElement: (tag) => new FakeElement(tag),
-  createTextNode: (texto) => new FakeText(texto),
-  getElementById: () => null,
-};
+import { percorrer, elementos, tags, textos } from './dom_falso.mjs';
 
 const { el } = await import('../../kit/painel/dom.js');
 const leads = await import('../../kit/painel/tela-leads.js');
 
-function* percorrer(no) {
-  yield no;
-  for (const filho of no.children || []) yield* percorrer(filho);
-}
-const elementos = (no) => [...percorrer(no)].filter((n) => n.nodeType === 1);
-const tags = (no) => elementos(no).map((n) => n.tagName);
-const textos = (no) => [...percorrer(no)].filter((n) => n.nodeType === 3).map((n) => n.dados);
 
 const MALICIOSO = '<img src=x onerror=alert(1)>';
 const PERIGOSAS = ['IMG', 'SCRIPT', 'SVG', 'IFRAME', 'B', 'STYLE', 'OBJECT', 'EMBED'];

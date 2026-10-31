@@ -21,9 +21,10 @@ RAIO_METROS = 10000
 # Media: 5 pontos com depth 3, medido em Brasilia: 65 negocios unicos (100 linhas, 35 repetidas) em
 # cerca de 5 minutos. Ver docs/planejamento/fase0-verificacao-motor.md. O max_time e a folga por job.
 # Ampla (mais pontos) nao foi medida: aparece como "em breve" e nao existe em TAMANHOS.
+# tempo_estimado e so uma estimativa para mostrar na tela (medido: rapida 40 a 45 s; media 5 a 6 min).
 TAMANHOS = {
-    "rapida": {"pontos": 1, "depth": 1, "max_time": 180},
-    "media": {"pontos": 5, "depth": 3, "max_time": 300},
+    "rapida": {"pontos": 1, "depth": 1, "max_time": 180, "tempo_estimado": "cerca de 1 minuto"},
+    "media": {"pontos": 5, "depth": 3, "max_time": 300, "tempo_estimado": "cerca de 5 a 6 minutos"},
 }
 TAMANHOS_EM_BREVE = ("ampla",)
 

@@ -47,7 +47,7 @@ class Cliente:
                 mensagem = corpo[:200]
             raise ErroDaApi(f"O servidor respondeu {e.code}: {mensagem}")
         except (urllib.error.URLError, OSError):
-            raise ErroDaApi("Não consegui falar com o servidor. Ligue ele com: python kit/servidor.py")
+            raise ErroDaApi("Não consegui falar com o servidor. Abra a pasta do kit no Explorador de Arquivos, clique na barra de endereço, digite powershell e aperte Enter, depois digite: python kit/servidor.py")
 
     @property
     def token(self):

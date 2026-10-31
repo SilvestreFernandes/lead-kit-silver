@@ -1,6 +1,7 @@
 // Tela mostrada quando não há perfil, ou quando o perfil tem problemas.
 // O perfil é feito pela IA do usuário, numa entrevista curta. O painel só explica como e confere de novo.
-import { el, blocoEstado, avisar } from './dom.js';
+import { el, blocoEstado, avisar, passoAPasso } from './dom.js';
+import { PASSOS_PERFIL_AUSENTE } from './instrucoes.js';
 
 function botaoVerificar(aoVerificar, aindaFalta, primario) {
   const botao = el('button', { class: 'btn' + (primario ? ' btn-primary' : ''), type: 'button' }, 'Verificar de novo');
@@ -23,10 +24,7 @@ function botaoVerificar(aoVerificar, aindaFalta, primario) {
 }
 
 export function montarPerfilAusente(raiz, { aoVerificar }) {
-  const passos = el('ol', { class: 'passos' },
-    el('li', {}, el('span', {}, 'Abra a sua IA, a mesma que instalou o kit, na pasta do Lead Kit Silver.')),
-    el('li', {}, el('span', {}, 'Peça para ela fazer a entrevista do seu perfil. Ela pergunta uma coisa de cada vez e você responde com palavras simples.')),
-    el('li', {}, el('span', {}, 'Quando ela disser que terminou, volte aqui e clique em Verificar de novo.')));
+  const passos = passoAPasso(PASSOS_PERFIL_AUSENTE);
 
   const bloco = blocoEstado({
     tipo: 'warn', selo: '!', nivel: 'h1',

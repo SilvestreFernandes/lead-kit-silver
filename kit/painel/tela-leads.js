@@ -385,6 +385,8 @@ export function montarLeads(raiz, ctx) {
     filtros: { ...FILTROS_PADRAO }, leads: [], total: 0, contagem: { A: 0, B: 0, C: 0 },
     carregando: true, carregandoMais: false, erro: null, perfil: { aviso: null }, buscas: [],
   };
+  const recado = ctx.consumirParametros ? ctx.consumirParametros() : null;
+  if (recado && recado.busca) estado.filtros.busca = String(recado.busca);  // veio de "Ver os leads desta busca"
   const seguirLista = seguidor();
   let temporizadorBusca = null;
   let vivo = true;

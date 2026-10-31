@@ -44,3 +44,9 @@ SOFTWARE.
 ```
 
 To support the engine's author, star the repository: https://github.com/gosom/google-maps-scraper
+
+## Location service (city to coordinates)
+
+- **Service:** Nominatim, run by the OpenStreetMap Foundation (https://nominatim.openstreetmap.org)
+- **Data:** (c) OpenStreetMap contributors, available under the Open Database License (ODbL): https://www.openstreetmap.org/copyright
+- **Use in the kit:** only the city name, the state and the country are sent, to find the coordinates of the search area. Results are cached on disk, with at most one request per second and a User-Agent that identifies the kit, as the usage policy asks: https://operations.osmfoundation.org/policies/nominatim/

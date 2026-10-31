@@ -148,7 +148,7 @@ test('servidor fora do ar vira erro de rede', async () => {
 
 test('resposta de erro que não é JSON não quebra', async () => {
   simular({ status: 500, corpo: '<html>boom</html>' });
-  await assert.rejects(api.ler('/api/estado'), (e) => e.tipo === 'servidor' && /Veja a janela/.test(e.message));
+  await assert.rejects(api.ler('/api/estado'), (e) => e.tipo === 'servidor' && /Olhe a janela escura/.test(e.message));
 });
 
 test('cancelamento (AbortError) passa direto, sem virar erro de rede', async () => {

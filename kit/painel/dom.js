@@ -95,7 +95,25 @@ export function avisar(texto) {
   temporizadorAviso = setTimeout(() => { caixa.hidden = true; }, 3200);
 }
 
+// Lista numerada de passos, em palavras simples.
+export function passoAPasso(passos) {
+  return el('ol', { class: 'passos' }, passos.map((p) => el('li', {}, el('span', {}, p))));
+}
+
+// Passo a passo (onde e como) seguido do comando com botão de copiar.
+// É a única forma de mostrar um comando na tela: a pessoa nunca recebe um comando sem saber onde digitar.
+// Com `recolhido`, os passos ficam numa seção que se abre ao clicar (para faixas de aviso).
+export function instrucoesComComando({ passos, comando: texto, recolhido }) {
+  const lista = passoAPasso(passos);
+  const caixa = texto ? comando(texto) : null;
+  if (recolhido) {
+    return [el('details', { class: 'como-fazer' }, el('summary', {}, 'Como fazer, passo a passo'), lista, caixa)];
+  }
+  return [lista, caixa];
+}
+
 // Comando para copiar e colar no terminal, com botão de copiar.
+// Use instrucoesComComando: ele acompanha o passo a passo de onde digitar.
 export function comando(texto) {
   return el('div', { class: 'cmd' },
     el('code', {}, texto),

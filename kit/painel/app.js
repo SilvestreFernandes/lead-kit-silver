@@ -3,9 +3,10 @@
 import { ler, seguidor, ABANDONADA, ErroApi } from './api.js';
 import {
   ABAS, INTERVALO_ESTADO_MS, abaDoHash, hashDaAba, abaVizinha, situacaoDoPerfil, abasHabilitadas,
-  temaAlternado, textoDaFalha, COMANDO_LIGAR_KIT, COMANDO_LIGAR_MOTOR,
+  temaAlternado, textoDaFalha,
 } from './util.js';
-import { el, limpar, blocoEstado, blocoCarregando, comando, avisar } from './dom.js';
+import { el, limpar, blocoEstado, blocoCarregando, instrucoesComComando, avisar } from './dom.js';
+import { COMANDO_LIGAR_KIT, PASSOS_LIGAR_KIT, motivoDoMotor } from './instrucoes.js';
 import { montarPerfilAusente, montarPerfilInvalido } from './tela-perfil.js';
 import { montarBuscar } from './tela-buscar.js';
 import { montarLeads } from './tela-leads.js';
@@ -23,6 +24,8 @@ const app = {
   aba: abaDoHash(location.hash),
   chaveTela: null,     // para não redesenhar a tela (e apagar o que a pessoa digitou) a cada verificação
   limparTela: null,    // função da tela atual para desfazer o que ela montou
+  parametros: null,    // recado de uma tela para a próxima (ex.: abrir Leads filtrado por uma busca)
+  ouvintes: new Set(), // telas que querem saber quando o estado do kit muda
 };
 
 const seguirEstado = seguidor();
@@ -59,8 +62,27 @@ export async function atualizarEstado() {
   return app.estado;
 }
 
-function irPara(aba) {
+function irPara(aba, parametros) {
+  app.parametros = parametros || null;
   if (location.hash === hashDaAba(aba)) { app.aba = aba; desenhar(); } else { location.hash = hashDaAba(aba); }
+}
+
+// A tela que abre pega o recado (uma vez só).
+function consumirParametros() {
+  const recado = app.parametros;
+  app.parametros = null;
+  return recado;
+}
+
+// Depois de uma busca terminar, o número ao lado de "Leads" precisa ser lido de novo.
+function recarregarContagem() {
+  app.contagemCarregada = false;
+  return carregarContagemDeLeads();
+}
+
+function observarEstado(funcao) {
+  app.ouvintes.add(funcao);
+  return () => app.ouvintes.delete(funcao);
 }
 
 // ---------- cabeçalho, abas e avisos
@@ -104,17 +126,20 @@ function desenharAvisos() {
   if (!app.carregou) return;
   if (app.falha && app.falha.tipo === 'rede' && app.estado) {
     area.avisos.append(faixa('bad',
-      el('p', {}, el('b', {}, 'O kit parou de responder. '), 'Ligue de novo com o comando ao lado e clique em Tentar de novo.'),
-      el('div', { class: 'acoes' }, comando(COMANDO_LIGAR_KIT), botaoPequeno('Tentar de novo', () => atualizarEstado(), true))));
+      el('p', {}, el('b', {}, 'O kit parou de responder. '), 'Ele pode ter sido fechado. Abra "Como fazer" para ligar de novo e clique em Tentar de novo.'),
+      ...instrucoesComComando({ passos: PASSOS_LIGAR_KIT, comando: COMANDO_LIGAR_KIT, recolhido: true }),
+      el('div', { class: 'acoes' }, botaoPequeno('Tentar de novo', () => atualizarEstado(), true))));
   } else if (app.falha && app.falha.tipo === 'token') {
     area.avisos.append(faixa('warn',
       el('p', {}, el('b', {}, 'A página ficou desatualizada. '), 'O kit foi reiniciado depois que você abriu esta página. Recarregue para continuar.'),
       el('div', { class: 'acoes' }, botaoPequeno('Recarregar a página', () => location.reload(), true))));
-  } else if (app.estado && !app.estado.motor_no_ar) {
+  } else if (app.estado && !app.estado.motor_no_ar && !(app.aba === 'buscar' && situacaoDoPerfil(app.estado) === 'ok')) {
+    // Na aba Buscar a própria tela mostra o motivo com mais detalhe; nas outras, a faixa avisa.
+    const motivo = motivoDoMotor(app.estado.motor_diagnostico);
     area.avisos.append(faixa('warn',
-      el('p', {}, el('b', {}, 'O motor de busca está desligado. '),
-        'Você ainda vê os leads salvos, mas não dá para fazer buscas novas. Ligue com o comando ao lado e espere uns 20 segundos.'),
-      el('div', { class: 'acoes' }, comando(COMANDO_LIGAR_MOTOR), botaoPequeno('Verificar de novo', () => atualizarEstado(), true))));
+      el('p', {}, el('b', {}, motivo.titulo + '. '), 'Você ainda vê os leads salvos, mas não dá para fazer buscas novas. ' + motivo.texto),
+      ...instrucoesComComando({ passos: motivo.passos, comando: motivo.comando, recolhido: true }),
+      el('div', { class: 'acoes' }, botaoPequeno('Verificar de novo', () => atualizarEstado(), true))));
   }
 }
 
@@ -141,6 +166,7 @@ function desenharTela() {
 
   const contexto = {
     estado: () => app.estado, avisar, irPara, atualizarEstado, atualizarContagem,
+    consumirParametros, recarregarContagem, observarEstado,
   };
   const aoVerificar = () => atualizarEstado();
 
@@ -150,7 +176,8 @@ function desenharTela() {
     const { titulo, texto } = textoDaFalha(app.falha ? app.falha.tipo : 'rede', app.falha && app.falha.message);
     area.tela.append(blocoEstado({
       tipo: 'bad', selo: '!', nivel: 'h1', titulo, texto,
-      extras: app.falha && app.falha.tipo === 'rede' ? [comando(COMANDO_LIGAR_KIT)] : [],
+      extras: app.falha && app.falha.tipo === 'rede'
+        ? instrucoesComComando({ passos: PASSOS_LIGAR_KIT, comando: COMANDO_LIGAR_KIT }) : [],
       acoes: [{ rotulo: 'Tentar de novo', primario: true, aoClicar: () => atualizarEstado() }],
     }));
   } else if (escolha.chave === 'perfil-ausente') {
@@ -168,6 +195,7 @@ function desenhar() {
   desenharAbas();
   desenharAvisos();
   desenharTela();
+  for (const ouvinte of [...app.ouvintes]) ouvinte();
 }
 
 // ---------- ligações com a página

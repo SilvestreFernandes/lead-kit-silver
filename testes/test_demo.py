@@ -2,6 +2,7 @@
 import json
 import shutil
 import threading
+import time
 import unittest
 import urllib.request
 
@@ -10,7 +11,7 @@ from testes import demo_painel
 
 class TestDemoDoPainel(unittest.TestCase):
     def subir(self, estado):
-        srv = demo_painel.montar(estado, 0)
+        srv = demo_painel.montar(estado, 0, atraso=0.05)  # sem demora: o teste nao espera a busca
         threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         self.addCleanup(lambda: (srv.shutdown(), srv.server_close(), shutil.rmtree(srv.pasta_temporaria, ignore_errors=True)))
         return srv
@@ -24,7 +25,7 @@ class TestDemoDoPainel(unittest.TestCase):
             with self.subTest(estado=estado):
                 srv = self.subir(estado)
                 d = self.ler(srv, "/api/estado")
-                self.assertEqual(d["motor_no_ar"], estado != "motor_desligado")
+                self.assertEqual(d["motor_no_ar"], estado not in ("motor_desligado", "docker_parado"))
                 esperado = {"perfil_ausente": (False, False), "perfil_invalido": (True, False)}.get(estado, (True, True))
                 self.assertEqual((d["perfil"]["existe"], d["perfil"]["valido"]), esperado)
 
@@ -58,6 +59,45 @@ class TestDemoDoPainel(unittest.TestCase):
         real = Path(demo_painel.RAIZ) / "dados"
         self.assertNotEqual(srv.caminho_banco.parent.resolve(), real.resolve())
         self.assertNotIn(str(real.resolve()), str(srv.caminho_banco.resolve()))
+
+
+    def test_estados_da_tela_buscar(self):
+        diag = self.subir("docker_parado")
+        self.assertEqual(self.ler(diag, "/api/estado")["motor_diagnostico"]["estado"], "docker_parado")
+        parado = self.subir("motor_desligado")
+        self.assertEqual(self.ler(parado, "/api/estado")["motor_diagnostico"]["estado"], "motor_parado")
+        zero = self.subir("zero_resultado")
+        ultima = self.ler(zero, "/api/buscas")["buscas"][0]
+        self.assertEqual((ultima["status"], ultima["total_leads"], ultima["erro"]), ("ok", 0, None))
+        cidade = self.subir("erro_cidade")
+        self.assertEqual(self.ler(cidade, "/api/buscas")["buscas"][0]["erro_tipo"], "cidade")
+        meio = self.subir("erro_no_meio")
+        b = self.ler(meio, "/api/buscas")["buscas"][0]
+        self.assertEqual((b["erro_tipo"], b["total_leads"], b["tamanho"]), ("parcial", 36, "media"))
+
+    def test_buscando_ja_abre_com_uma_busca_media_em_andamento(self):
+        srv = demo_painel.montar("buscando", 0, atraso=0.3)  # 5 pontos: a busca dura uns 3 s
+        threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+
+        def encerrar():
+            fim = time.time() + 20
+            while srv.busca_ativa is not None and time.time() < fim:  # espera a busca acabar antes de apagar a pasta
+                time.sleep(0.05)
+            srv.shutdown()
+            srv.server_close()
+            shutil.rmtree(srv.pasta_temporaria, ignore_errors=True)
+
+        self.addCleanup(encerrar)
+        estado = self.ler(srv, "/api/estado")
+        self.assertIsNotNone(estado["busca_em_andamento"])
+        busca = self.ler(srv, f"/api/buscas/{estado['busca_em_andamento']}")
+        self.assertEqual((busca["tamanho"], busca["pontos"]), ("media", 5))
+
+    def test_normal_tem_historico_com_contagens(self):
+        srv = self.subir("normal")
+        buscas = self.ler(srv, "/api/buscas")["buscas"]
+        self.assertGreaterEqual(len(buscas), 4)
+        self.assertTrue(all(b["novos"] is not None for b in buscas))
 
 
 if __name__ == "__main__":

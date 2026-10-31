@@ -210,6 +210,15 @@ Critérios de aprovação:
 - "Refazer perfil" guarda o anterior em `perfil.anterior.json`.
 - O mesmo prompt funciona em pelo menos duas ferramentas (Claude Code e Codex), e só prometemos no material de venda o que foi testado.
 
+## Critérios de pronto da fase 4 (mensagens)
+
+Anotados em 2026-10-30, para valer quando a fase 4 mexer nos modelos de mensagem. Nada disso foi mudado ainda.
+
+- **O modelo final de mensagem sempre contém** `{meu_nome}`, `{minha_empresa}` e uma linha do que a pessoa oferece (vinda do perfil). Mensagem sem essas três partes não é gerada.
+- **Cada regra de nota precisa de uma frase de abertura** que sirva de gancho para quem vende o serviço do perfil (por exemplo, "não achei um site no perfil do Google Maps" é gancho para quem vende sites).
+- **Regra sem gancho bom não gera mensagem automática.** Exemplo: só "nota alta". O lead continua com nota e motivo na lista, mas o painel não escreve uma mensagem pronta para ele, e diz isso em português simples em vez de inventar uma abertura.
+- Os testes da fase 4 conferem as três coisas acima com perfis fictícios.
+
 ## Pontos em aberto
 
 Decisões que ainda dependem do Silvestre ou de teste. A IA que implementa deve parar e perguntar antes de decidir qualquer uma delas.

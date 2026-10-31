@@ -24,7 +24,12 @@ CREATE TABLE IF NOT EXISTS buscas (
     job_id TEXT,
     status TEXT NOT NULL DEFAULT 'criada',
     erro TEXT,
-    total_leads INTEGER
+    total_leads INTEGER,
+    novos INTEGER,
+    ja_existiam INTEGER,
+    fora_da_lista INTEGER,
+    erro_tipo TEXT,
+    terminou_em TEXT
 );
 CREATE TABLE IF NOT EXISTS leads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,6 +55,12 @@ CREATE TABLE IF NOT EXISTS leads_busca (
 );
 """
 
+# Colunas que buscas feitas por versoes antigas do kit ainda nao tem. abrir() acrescenta o que faltar.
+COLUNAS_NOVAS_DE_BUSCAS = {
+    "novos": "INTEGER", "ja_existiam": "INTEGER", "fora_da_lista": "INTEGER",
+    "erro_tipo": "TEXT", "terminou_em": "TEXT",
+}
+
 STATUS_LEAD = ("novo", "contatado", "respondeu", "fechado", "descartado")
 STATUS_BUSCA_ABERTOS = ("criada", "working")
 
@@ -65,6 +76,11 @@ def abrir(caminho=":memory:"):
         conn.execute("PRAGMA journal_mode=WAL")  # leitura nao trava enquanto a busca grava
     conn.execute("PRAGMA busy_timeout=10000")
     conn.executescript(ESQUEMA)
+    existentes = {linha[1] for linha in conn.execute("PRAGMA table_info(buscas)")}
+    for coluna, tipo in COLUNAS_NOVAS_DE_BUSCAS.items():
+        if coluna not in existentes:
+            conn.execute(f"ALTER TABLE buscas ADD COLUMN {coluna} {tipo}")
+    conn.commit()
     return conn
 
 
@@ -78,7 +94,8 @@ def criar_busca(conn, categoria, cidade, uf, tamanho, parametros, email_ligado):
 
 
 def atualizar_busca(conn, busca_id, **campos):
-    permitidos = {"job_id", "status", "erro", "total_leads", "parametros"}
+    permitidos = {"job_id", "status", "erro", "total_leads", "parametros", "novos", "ja_existiam",
+                  "fora_da_lista", "erro_tipo", "terminou_em"}
     if not campos or set(campos) - permitidos:
         raise ValueError("campo de busca invalido")
     if "parametros" in campos:
@@ -107,10 +124,22 @@ def listar_buscas(conn):
 def interromper_buscas_abertas(conn):
     """No inicio do servidor: busca que ficou 'rodando' de uma execucao anterior nao esta rodando."""
     cur = conn.execute(
-        "UPDATE buscas SET status='erro', erro=? WHERE status IN ('criada','working')",
-        ("Interrompida: o kit foi fechado durante a busca. Faça a busca de novo.",))
+        "UPDATE buscas SET status='erro', erro=?, erro_tipo='interrompida', terminou_em=?"
+        " WHERE status IN ('criada','working')",
+        ("Interrompida: o kit foi fechado durante a busca. Faça a busca de novo.", agora()))
     conn.commit()
     return cur.rowcount
+
+
+def chaves_existentes(conn, chaves):
+    """Quais dessas chaves de lead ja estao no banco (para contar novos e ja existentes)."""
+    chaves = list(chaves)
+    achadas = set()
+    for i in range(0, len(chaves), 500):
+        parte = chaves[i:i + 500]
+        marcas = ",".join("?" * len(parte))
+        achadas.update(r[0] for r in conn.execute(f"SELECT chave FROM leads WHERE chave IN ({marcas})", parte))
+    return achadas
 
 
 def salvar_leads(conn, busca_id, leads, cidade, uf, email_ligado):

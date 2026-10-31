@@ -50,7 +50,7 @@ Não decida sozinho: texto da licença da camada paga, nome do produto, parcelam
 
 ## Estado do projeto
 
-As fases 0 (verificação do motor em Docker), 1 (núcleo sem interface) e 2 (servidor) estão concluídas. A fase 3 (painel) está em andamento, etapa por etapa.
+As fases 0 (verificação do motor em Docker), 1 (núcleo sem interface) e 2 (servidor) estão concluídas. A fase 3 (painel) está em andamento, etapa por etapa: as etapas 1 a 4 (API, tela Leads, exportação, tela Buscar) estão commitadas. Falta a etapa 5 (Minha oferta) e os estados finais. Todo texto que manda a pessoa executar algo usa o passo a passo de kit/painel/instrucoes.js (onde e como abrir o terminal).
 
 Fato medido do motor: ele entrega cerca de 20 negócios por palavra-chave e por ponto, e a profundidade (`depth`) quase não muda isso. Por isso o tamanho da busca é uma grade de pontos (`kit/grade.py`): a rápida usa 1 ponto, a média usa 5 (medida em Brasília: 65 negócios únicos contra 16). A busca ampla ainda não foi medida e aparece como "em breve". Não defina a ampla sem medir antes. Os números estão em `fase0-verificacao-motor.md`.
 

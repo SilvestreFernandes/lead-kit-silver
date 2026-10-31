@@ -173,5 +173,65 @@ class TestUmaConexaoPorThread(unittest.TestCase):
         self.assertEqual((falhas, total), ([], 8))
 
 
+class TestBancoDaEtapa4(unittest.TestCase):
+    def test_banco_antigo_ganha_as_colunas_novas_sem_perder_nada(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+            caminho = str(Path(d) / "antigo.db")
+            conn = sqlite3.connect(caminho)
+            conn.executescript("""
+                CREATE TABLE buscas (id INTEGER PRIMARY KEY AUTOINCREMENT, criada_em TEXT NOT NULL,
+                    categoria TEXT NOT NULL, cidade TEXT NOT NULL, uf TEXT NOT NULL, tamanho TEXT NOT NULL,
+                    parametros TEXT NOT NULL, email_ligado INTEGER NOT NULL DEFAULT 0, job_id TEXT,
+                    status TEXT NOT NULL DEFAULT 'criada', erro TEXT, total_leads INTEGER);
+                INSERT INTO buscas (criada_em, categoria, cidade, uf, tamanho, parametros, status, total_leads)
+                    VALUES ('2026-10-01T10:00:00', 'padaria', 'Sobradinho', 'DF', 'rapida', '{}', 'ok', 16);
+            """)
+            conn.commit()
+            conn.close()
+            novo = banco.abrir(caminho)
+            for _ in range(2):  # abrir de novo nao quebra (migracao idempotente)
+                novo.close()
+                novo = banco.abrir(caminho)
+            b = banco.obter_busca(novo, 1)
+            novo.close()
+        self.assertEqual((b["categoria"], b["total_leads"]), ("padaria", 16))
+        for coluna in ("novos", "ja_existiam", "fora_da_lista", "erro_tipo", "terminou_em"):
+            self.assertIn(coluna, b)
+            self.assertIsNone(b[coluna])
+
+    def test_novos_campos_da_busca_sao_gravados(self):
+        conn = banco.abrir()
+        self.addCleanup(conn.close)
+        b = banco.criar_busca(conn, "x", "C", "DF", "rapida", {}, False)
+        banco.atualizar_busca(conn, b, status="ok", novos=7, ja_existiam=3, fora_da_lista=2,
+                              erro_tipo=None, terminou_em="2026-10-30T10:00:00")
+        d = banco.obter_busca(conn, b)
+        self.assertEqual((d["novos"], d["ja_existiam"], d["fora_da_lista"], d["terminou_em"]),
+                         (7, 3, 2, "2026-10-30T10:00:00"))
+
+    def test_chaves_existentes_inclusive_com_mais_de_500(self):
+        conn = banco.abrir()
+        self.addCleanup(conn.close)
+        b = banco.criar_busca(conn, "x", "C", "DF", "rapida", {}, False)
+        leads = [limpeza.limpar_linha(linha(n)) for n in range(1, 701)]
+        banco.salvar_leads(conn, b, leads, "C", "DF", False)
+        quero = [l["chave"] for l in leads] + ["p:nao-existe-1", "p:nao-existe-2"]
+        achadas = banco.chaves_existentes(conn, quero)
+        self.assertEqual(len(achadas), 700)
+        self.assertNotIn("p:nao-existe-1", achadas)
+        self.assertEqual(banco.chaves_existentes(conn, []), set())
+
+    def test_busca_interrompida_ganha_tipo_e_hora_de_fim(self):
+        conn = banco.abrir()
+        self.addCleanup(conn.close)
+        b = banco.criar_busca(conn, "x", "C", "DF", "rapida", {}, False)
+        banco.atualizar_busca(conn, b, status="working")
+        banco.interromper_buscas_abertas(conn)
+        d = banco.obter_busca(conn, b)
+        self.assertEqual((d["status"], d["erro_tipo"]), ("erro", "interrompida"))
+        self.assertTrue(d["terminou_em"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -95,6 +95,30 @@ Lições para a fase 1:
 - `emails` só vem com a opção de e-mail ligada no job.
 - Na busca de padarias, parte dos leads veio sem `website` e sem `phone`, então a regra `sem_site` tem material real.
 
+## Cancelar uma busca (fase 3, 2026-10-30)
+
+Testado no motor real (v1.18.1) com um job de `depth` 1 em andamento:
+
+- `DELETE /api/v1/jobs/{id}` devolveu 200 e o job sumiu (o `GET` seguinte deu 404).
+- `POST /api/v1/jobs/{id}/cancel` e `POST /api/v1/jobs/{id}/stop` deram 405: essas rotas não existem.
+- **Não foi confirmado** se o `DELETE` interrompe a coleta no Google ou só apaga o registro.
+- O kit também não tem cancelamento: `servidor.py` e `motor.py` não têm rota nem função para isso, e há teste que garante que não existe rota de cancelar.
+
+Por isso o painel **não tem botão de cancelar**. A tela de busca em andamento diz que a busca termina sozinha. Se um dia for preciso cancelar, o caminho é: o servidor parar de esperar o job, apagar o job no motor com `DELETE` e marcar a busca, e só então medir se a coleta realmente para.
+
+## O que o kit chama fora do computador (fase 3)
+
+Conferido no código (`testes/test_privacidade.py` repete essa conferência a cada rodada de testes):
+
+- Só o `geocodificar.py` pede algo à internet: `https://nominatim.openstreetmap.org/search` com `city`, `state`, `country=Brazil`, `format` e `limit`. O tipo de negócio **não** vai nessa chamada. Há cache em disco para não repetir o pedido.
+- `motor.py` e `testar_api.py` só falam com `127.0.0.1`.
+- O link do `wa.me` só é aberto quando a pessoa clica, e o kit nunca o chama.
+- O motor (programa de terceiros, em Docker) é quem consulta o Google Maps, pela conexão da pessoa. O que ele envia além disso não foi examinado.
+
+## Extra de e-mail: custo de tempo (medido na fase 3)
+
+Uma busca de um ponto levou cerca de 30 s sem a opção de e-mail e cerca de 1 min 37 s com ela, ou seja, uns 3 vezes mais. Foi uma medição só, então a tela diz "em um teste nosso, levou cerca de 3 vezes mais" e não promete tempo nem que haverá e-mail (muitos sites não publicam).
+
 ## Ainda falta conferir
 
 - **ARM:** não foi conferido se a imagem roda em computadores com processador ARM (Windows ARM e Macs com chip Apple). O kit de referência de Mahan diz que a imagem publicada é `linux/amd64` e que no chip Apple ela roda por emulação. Até testar, o material de venda só cita Windows x64.

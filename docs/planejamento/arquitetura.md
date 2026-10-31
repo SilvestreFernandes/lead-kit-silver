@@ -48,6 +48,7 @@ lead-kit-silver/
     motor.py                cliente do motor (jobs, status, download)
     geocodificar.py         cidade para latitude e longitude (Nominatim)
     limpeza.py              lê o CSV do motor, limpa os campos e tira duplicados
+    diagnostico.py          descobre por que o motor não responde (Docker ausente, Docker parado ou só o motor parado)
     grade.py                pontos de uma busca maior (centro e quatro pontos ao redor)
     xlsx.py                 gera planilha .xlsx só com zipfile e XML escritos à mão
     pontuacao.py            regras e nota A, B, C
@@ -85,10 +86,14 @@ lead-kit-silver/
     test_painel_js.py       roda js/util.test.mjs com o Node, se ele existir (só ferramenta de desenvolvimento)
     js/util.test.mjs        testes de util.js e api.js
     js/leads.test.mjs       prova que dado malicioso do Google vira só texto na tela de Leads (DOM de mentira)
+    js/buscar.test.mjs      tela Buscar: textos, resumo, erros, zero resultado, sem botão de cancelar
+    js/dom_falso.mjs        o DOM de mentira usado pelos testes de JavaScript
     test_demo.py            a demonstração do painel sobe em todos os estados
     demo_painel.py          servidor de demonstração com dados fictícios, um modo por estado do painel (ver o topo do arquivo)
     test_servidor.py
     test_xlsx.py
+    test_diagnostico.py
+    test_privacidade.py     o que a tela diz que sai do computador bate com o que o código faz
     test_testar_api.py
   docs/
     planejamento/           este documento e entrevista-e-perfil.md
@@ -177,18 +182,20 @@ O servidor (`kit/servidor.py`) usa só a biblioteca padrão do Python, escuta em
 
 | Rota | Pra quê |
 | --- | --- |
-| `GET /api/estado` | Motor no ar, perfil válido, versão do kit |
+| `GET /api/estado` | Motor no ar, perfil válido, versão do kit, busca em andamento e, quando o motor não responde, o motivo (`motor_diagnostico`: Docker ausente, Docker parado ou só o motor parado) |
 | `GET /api/opcoes` | Regras com pesos padrão, exclusões, marcadores, tamanhos de busca, UFs e status. O painel monta os formulários com isso, sem repetir a lista no JavaScript |
 | `GET /api/perfil` | Lê o perfil |
 | `PUT /api/perfil` | Grava o perfil, mas só depois de passar no validador |
 | `POST /api/buscas` | Cria uma busca: categoria, cidade e UF, tamanho, extras |
 | `GET /api/buscas` | Lista as buscas já feitas |
-| `GET /api/buscas/{id}` | Status e progresso de uma busca |
+| `GET /api/buscas/{id}` | Status e progresso de uma busca: etapa, ponto atual e total de pontos, tempo decorrido, tempo estimado e, ao fim, `total_leads`, `novos`, `ja_existiam`, `fora_da_lista`, `terminou_em` e, se deu erro, `erro` e `erro_tipo` (`cidade`, `servico_de_mapas`, `motor`, `formato`, `parcial`, `interrompida` ou `inesperado`). **Não existe rota para cancelar uma busca** (ver `fase0-verificacao-motor.md`) |
 | `GET /api/leads` | Lista com filtros: busca, nota, status, texto, excluídos, `sem_site=1` e `celular=1`. Devolve também `contagem_por_letra` (com todos os filtros menos o da letra, para os botões A, B e C) |
 | `GET /api/leads/{id}` | Um lead com motivos da nota e mensagem já preenchida |
 | `PATCH /api/leads/{id}` | Muda status, anotação ou a mensagem editada |
 | `POST /api/leads/reavaliar` | Recalcula as notas depois que o perfil mudou |
 | `GET /api/exportar` | Baixa os leads filtrados. `?formato=csv` (padrão) ou `?formato=xlsx`. **Exige o cabeçalho `X-Token`**, como as escritas, porque entrega os dados dos leads em arquivo |
+
+Só uma busca roda por vez (`409` se já houver outra, com o id dela). O estado vem do servidor, então recarregar a página continua mostrando a busca em andamento.
 
 Fluxo de uma busca: o painel envia `POST /api/buscas`, o servidor geocodifica a cidade (Nominatim), cria o job no motor, acompanha o status em segundo plano, baixa o CSV quando termina, limpa e pontua cada linha e grava no SQLite. O painel só consulta o progresso.
 
@@ -221,9 +228,19 @@ O painel é uma página estática (`index.html`, `estilo.css` e alguns arquivos 
 
 | Tela | O que faz | Dados |
 | --- | --- | --- |
-| Buscar | Escolhe o tipo de negócio (sugerido pelo perfil), UF e cidade, tamanho da busca e o extra de e-mail. Um controle só pro tamanho: a cobertura é fixa em 10 km ao redor do centro da cidade. Mostra progresso | `POST /api/buscas`, `GET /api/buscas/{id}` |
+| Buscar | Tipo de negócio (sugestões do perfil, aceita texto livre), UF e cidade (sugestões das regiões do perfil), tamanho da busca (rápida e média; ampla aparece como "em breve" e desativada) e o extra de e-mail. Cobertura fixa em 10 km ao redor do centro da cidade. Mostra a busca em andamento com progresso real, o resumo ao fim, os erros e o histórico | `GET /api/opcoes`, `GET /api/perfil`, `GET /api/buscas`, `POST /api/buscas`, `GET /api/buscas/{id}` |
 | Leads | Tabela com nota A, B, C, filtros (nota, status, texto, lista ou excluídos, busca), carregamento por partes de 100 e exportação. Ao abrir um lead (gaveta): "Por quê" em frases simples com os pontos, mensagem pronta e editável, copiar, abrir o WhatsApp, status e anotação. Fica sempre visível o aviso de conformidade quando a área é regulada ou a pessoa não sabe | `GET /api/leads`, `GET` e `PATCH /api/leads/{id}`, `GET /api/exportar` (CSV e .xlsx, com token), `GET /api/perfil`, `GET /api/buscas` |
 | Minha oferta | Edita o perfil: oferta, tom, regras e pesos, exclusões e os modelos de mensagem. Salvar recalcula as notas | `GET` e `PUT /api/perfil`, `POST /api/leads/reavaliar` |
+
+Regras da tela Buscar (fase 3):
+
+- **Uma busca por vez, mostrada com clareza.** Se já existe uma busca (iniciada por esta página, por outra aba ou antes de recarregar), a tela mostra só ela: título, tamanho, tempo decorrido, ponto atual, etapa e a barra, tudo lido do servidor a cada 2 s. Busca de um ponto só tem barra sem fim definido, em vez de um número inventado.
+- **Sem botão de cancelar.** Nem o servidor nem o motor têm cancelamento (testado). A tela diz que a busca termina sozinha e que continua se a página for recarregada, desde que a janela do kit fique aberta.
+- **Sem promessa de quantidade.** A tela diz que o Google varia entre buscas e que o resultado depende da cidade e do tipo de negócio. Os tempos são sempre "estimativa" (rápida: cerca de 1 minuto; média: cerca de 5 a 6 minutos). Os números medidos na fase 0 e na fase 3 ficam só na documentação interna.
+- **Resumo honesto ao fim:** quantos negócios foram encontrados, quantos são novos, quantos já existiam de buscas anteriores e quantos ficaram fora da lista pelas exclusões do perfil. **Resultado zero nunca aparece como sucesso**: a tela explica que pode ser a cidade, o termo ou uma mudança no Google, e o que tentar (inclusive procurar uma versão mais nova do kit, que é o caminho de manutenção contra mudanças do Google).
+- **Erros com mensagem própria:** motor desligado, Docker parado, Docker não encontrado, cidade não encontrada, serviço de localização inacessível, falha no meio da busca (o que já chegou fica salvo e aparece em Leads), formato de resultado desconhecido, busca interrompida por o kit ter sido fechado, e campo vazio (validado antes de enviar, sem pedido ao servidor).
+- **O que sai do computador:** a tela diz, e um teste confere com o código, que só o nome da cidade e o estado vão para o serviço de localização OpenStreetMap (Nominatim), que o motor local consulta o Google Maps pela conexão da pessoa e que leads, notas, perfil e mensagens ficam só no computador.
+- **Uso responsável:** aviso curto sobre os termos do Google, a LGPD e o envio manual. Na primeira busca maior, um aviso (que não bloqueia) sobre o risco de o Google limitar o acesso da internet por um tempo.
 
 Regras da tela de Leads (fase 3):
 

@@ -13,7 +13,7 @@ if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
 from kit import banco, grade, limpeza, motor as motor_mod, pontuacao, validar_perfil  # noqa: E402
-from kit.geocodificar import ErroGeocodificacao, Geocodificador  # noqa: E402
+from kit.geocodificar import CidadeNaoEncontrada, ErroGeocodificacao, Geocodificador  # noqa: E402
 
 DADOS = RAIZ / "dados"
 PAUSA_ENTRE_PONTOS_S = 15  # medido assim na fase 3; evita bater no Google em sequencia
@@ -26,6 +26,29 @@ def iniciar_busca(conn, categoria, cidade, uf, tamanho, email):
     return banco.criar_busca(conn, categoria, cidade, uf, tamanho, parametros, email)
 
 
+class ErroBuscaParcial(motor_mod.ErroMotor):
+    """A busca parou no meio, mas os negocios dos pontos anteriores ja estavam salvos."""
+
+    def __init__(self, mensagem, salvos):
+        super().__init__(mensagem)
+        self.salvos = salvos
+
+
+def tipo_do_erro(erro):
+    """Rotulo curto do erro, guardado na busca para a tela explicar o que fazer em cada caso."""
+    if isinstance(erro, ErroBuscaParcial):
+        return "parcial"
+    if isinstance(erro, CidadeNaoEncontrada):
+        return "cidade"
+    if isinstance(erro, ErroGeocodificacao):
+        return "servico_de_mapas"
+    if isinstance(erro, limpeza.ErroCSV):
+        return "formato"
+    if isinstance(erro, motor_mod.ErroMotor):
+        return "motor"
+    return "inesperado"
+
+
 def _pontuar_banco(conn, perfil, email):
     """Avalia o banco inteiro: "possivel rede" depende dos leads de todas as buscas."""
     avaliados = pontuacao.avaliar_todos(banco.todos_os_leads(conn), perfil, email)
@@ -33,29 +56,55 @@ def _pontuar_banco(conn, perfil, email):
     return avaliados
 
 
+def _fora_da_lista(avaliados, achados):
+    return sum(1 for r in avaliados if r["lead"]["chave"] in achados and r["excluido_por"])
+
+
 def executar_busca(conn, busca_id, perfil, motor, geo, progresso=None, dormir=time.sleep):
     """Roda a busca inteira, ponto por ponto. Em erro, marca a busca como 'erro' e repete a excecao.
 
     Cada ponto da grade vira um job no motor, com PAUSA_ENTRE_PONTOS_S entre eles. Os leads de cada
     ponto sao salvos assim que chegam, entao uma falha no meio nao perde o que ja veio.
-    `conn` precisa ser da thread que chama. `progresso(etapa, segundos=None)` e opcional.
-    Devolve {'achados': [...], 'ignoradas': n, 'avaliados': [...]} (avaliados: o banco todo).
+    `conn` precisa ser da thread que chama. `progresso(etapa, segundos, ponto, pontos)` e opcional.
+    Ao final a busca guarda: total_leads, novos (nao existiam antes), ja_existiam (de buscas
+    anteriores) e fora_da_lista (excluidos pelo perfil), alem de terminou_em e, se der erro, erro_tipo.
+    Devolve {'achados': [...], 'ignoradas': n, 'avaliados': [...], 'novos': n, 'ja_existiam': n,
+    'fora_da_lista': n} (avaliados: o banco todo).
     """
+    ponto_atual = {"i": 0, "n": 1}  # o total vem do tamanho da busca, entao ja e conhecido desde o inicio
+
     def avisar(etapa, segundos=None):
         if progresso:
-            progresso(etapa, segundos)
+            progresso(etapa, segundos, ponto_atual["i"], ponto_atual["n"])
 
     busca = banco.obter_busca(conn, busca_id)
     email = busca["email_ligado"]
+    ponto_atual["n"] = motor_mod.TAMANHOS[busca["tamanho"]]["pontos"]
     achados, ignoradas, avaliados = {}, 0, []
+    contagem = {"novos": 0, "ja_existiam": 0}
+
+    def contar(leads):
+        """Conta cada negocio uma vez por busca, ANTES de salvar: novo ou ja existia de antes."""
+        ineditos = [l for l in leads if l["chave"] not in achados]
+        existentes = banco.chaves_existentes(conn, [l["chave"] for l in ineditos])
+        for l in ineditos:
+            contagem["ja_existiam" if l["chave"] in existentes else "novos"] += 1
+            achados[l["chave"]] = l
+
+    def numeros():
+        return {"total_leads": len(achados), "novos": contagem["novos"], "ja_existiam": contagem["ja_existiam"],
+                "fora_da_lista": _fora_da_lista(avaliados, achados), "terminou_em": banco.agora()}
+
     try:
         banco.atualizar_busca(conn, busca_id, status="working")
         avisar("Achando a cidade no mapa")
         lat, lon = geo.buscar(busca["cidade"], busca["uf"])
         pontos = grade.pontos_da_grade(lat, lon, motor_mod.TAMANHOS[busca["tamanho"]]["pontos"])
+        ponto_atual["n"] = len(pontos)
         palavra = f"{busca['categoria']} em {busca['cidade']} {busca['uf']}"
         pedidos, jobs = [], []
         for i, ponto in enumerate(pontos, start=1):
+            ponto_atual["i"] = i
             sufixo = f" (ponto {i} de {len(pontos)})" if len(pontos) > 1 else ""
             try:
                 if i > 1:
@@ -76,25 +125,26 @@ def executar_busca(conn, busca_id, perfil, motor, geo, progresso=None, dormir=ti
                 if not achados:
                     raise
                 # Ja ha leads salvos de pontos anteriores: avisa onde parou e ainda calcula as notas.
-                _pontuar_banco(conn, perfil, email)
-                raise motor_mod.ErroMotor(
+                avaliados = _pontuar_banco(conn, perfil, email)
+                raise ErroBuscaParcial(
                     f"A busca parou no ponto {i} de {len(pontos)}. Os {len(achados)} negócios dos pontos "
-                    f"anteriores foram salvos. Motivo: {e}")
+                    f"anteriores foram salvos. Motivo: {e}", len(achados)) from e
             ignoradas += ignoradas_ponto
-            for lead in do_ponto:
-                achados.setdefault(lead["chave"], lead)
+            contar(do_ponto)
             banco.salvar_leads(conn, busca_id, do_ponto, busca["cidade"], busca["uf"], email)
         avisar("Calculando as notas")
         avaliados = _pontuar_banco(conn, perfil, email)
-        banco.atualizar_busca(conn, busca_id, status="ok", total_leads=len(achados))
+        banco.atualizar_busca(conn, busca_id, status="ok", **numeros())
     except ERROS_ESPERADOS as e:
-        banco.atualizar_busca(conn, busca_id, status="erro", erro=str(e), total_leads=len(achados))
+        banco.atualizar_busca(conn, busca_id, status="erro", erro=str(e), erro_tipo=tipo_do_erro(e), **numeros())
         raise
     except Exception as e:
         banco.atualizar_busca(conn, busca_id, status="erro", erro="Erro inesperado: " + str(e),
-                              total_leads=len(achados))
+                              erro_tipo="inesperado", **numeros())
         raise
-    return {"achados": list(achados.values()), "ignoradas": ignoradas, "avaliados": avaliados}
+    return {"achados": list(achados.values()), "ignoradas": ignoradas, "avaliados": avaliados,
+            "novos": contagem["novos"], "ja_existiam": contagem["ja_existiam"],
+            "fora_da_lista": _fora_da_lista(avaliados, achados)}
 
 
 def _tabela(resultados, saida, limite):
@@ -127,7 +177,7 @@ def executar(args, motor, geo, saida=print):
         saida(f"Procurando '{args.categoria}' em {args.cidade}-{args.uf} (busca {args.tamanho})...")
         busca_id = iniciar_busca(conn, args.categoria, args.cidade, args.uf, args.tamanho, args.email)
 
-        def progresso(etapa, segundos=None):
+        def progresso(etapa, segundos=None, ponto=None, pontos=None):
             if etapa.startswith("Esperando o motor"):
                 saida(f"  {etapa.lower()}... {int(segundos)} s")
             elif etapa.startswith("Enviando a busca"):

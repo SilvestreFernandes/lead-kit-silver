@@ -27,7 +27,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
-from kit import banco, buscar, consulta, motor as motor_mod, validar_perfil  # noqa: E402
+from kit import banco, buscar, consulta, diagnostico as diagnostico_mod, motor as motor_mod, validar_perfil  # noqa: E402
 from kit.geocodificar import Geocodificador  # noqa: E402
 
 VERSAO = "0.2.0-dev"
@@ -76,9 +76,12 @@ def json_resposta(status, dados):
 
 def rota_estado(srv, params, consulta_, corpo):
     perfil, erros, avisos = validar_perfil.carregar(srv.caminho_perfil)
+    no_ar = srv.motor.no_ar()
     return 200, {
         "versao_kit": VERSAO,
-        "motor_no_ar": srv.motor.no_ar(),
+        "motor_no_ar": no_ar,
+        # Quando o motor nao responde: o motivo (Docker ausente, Docker parado ou so o motor parado) e o que fazer.
+        "motor_diagnostico": None if no_ar else srv.diagnostico(srv.motor),
         "perfil": {"existe": srv.caminho_perfil.exists(), "valido": not erros,
                    "erros": erros, "avisos": avisos},
         "busca_em_andamento": srv.busca_ativa,
@@ -95,7 +98,8 @@ def rota_opcoes(srv, params, consulta_, corpo):
         "marcadores": esquema["marcadores"],
         "canais": esquema["canais"], "tons": esquema["tons"], "portes": esquema["portes"],
         "peso_minimo": esquema["peso_minimo"], "peso_maximo": esquema["peso_maximo"],
-        "tamanhos": [{"id": t, "pontos": cfg["pontos"]} for t, cfg in motor_mod.TAMANHOS.items()],
+        "tamanhos": [{"id": t, "pontos": cfg["pontos"], "tempo_estimado": cfg["tempo_estimado"]}
+                     for t, cfg in motor_mod.TAMANHOS.items()],
         "tamanhos_em_breve": list(motor_mod.TAMANHOS_EM_BREVE),
         "ufs": list(UFS),
         "cortes_padrao": regras["cortes"],
@@ -237,8 +241,9 @@ def rota_busca_criar(srv, params, consulta_, corpo):
         raise Erro(400, "O campo email precisa ser true ou false.")
     perfil = _perfil_valido(srv)
     if not srv.motor.no_ar():
-        raise Erro(503, "O motor de busca não está ligado. Ligue com: docker compose up -d "
-                        "(espere uns 20 segundos e tente de novo).")
+        motivo = srv.diagnostico(srv.motor)
+        if motivo:  # None significa que o motor voltou agora mesmo
+            raise Erro(503, diagnostico_mod.mensagem_completa(motivo), motor_diagnostico=motivo)
     with srv.trava_busca:
         if srv.busca_ativa is not None:
             raise Erro(409, "Já existe uma busca em andamento. Espere ela terminar.",
@@ -251,11 +256,16 @@ def rota_busca_criar(srv, params, consulta_, corpo):
 
 
 def _busca_publica(srv, busca):
-    d = {k: busca[k] for k in ("id", "criada_em", "categoria", "cidade", "uf", "tamanho", "email_ligado",
-                               "status", "erro", "total_leads")}
+    d = {k: busca[k] for k in ("id", "criada_em", "terminou_em", "categoria", "cidade", "uf", "tamanho",
+                               "email_ligado", "status", "erro", "erro_tipo", "total_leads", "novos",
+                               "ja_existiam", "fora_da_lista")}
     andamento = srv.progresso.get(busca["id"])
     d["etapa"] = andamento["etapa"] if andamento else None
     d["segundos"] = andamento["segundos"] if andamento else None
+    d["ponto"] = andamento["ponto"] if andamento else None
+    tamanho = motor_mod.TAMANHOS.get(busca["tamanho"], {})
+    d["pontos"] = tamanho.get("pontos")
+    d["tempo_estimado"] = tamanho.get("tempo_estimado")
     return d
 
 
@@ -454,7 +464,7 @@ class Servidor(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, porta=PORTA_PADRAO, pasta_dados=None, pasta_painel=None, motor=None, geo=None,
-                 token=None, endereco=ENDERECO, dormir=time.sleep):
+                 token=None, endereco=ENDERECO, dormir=time.sleep, diagnostico=None):
         if endereco != ENDERECO:
             raise ValueError("O servidor só pode escutar em 127.0.0.1.")
         super().__init__((endereco, porta), Manipulador)
@@ -469,6 +479,7 @@ class Servidor(ThreadingHTTPServer):
         self.motor = motor or motor_mod.Motor()
         self.geo = geo or Geocodificador(arquivo_cache=pasta_dados / "cache_geocodificacao.json")
         self.dormir = dormir
+        self.diagnostico = diagnostico or diagnostico_mod.DiagnosticoComCache()
         self.trava_busca = threading.Lock()
         self.busca_ativa = None
         self.progresso = {}
@@ -483,8 +494,8 @@ class Servidor(ThreadingHTTPServer):
     def trabalho_da_busca(self, busca_id, perfil):
         inicio = time.monotonic()
 
-        def progresso(etapa, segundos=None):
-            self.progresso[busca_id] = {"etapa": etapa, "segundos": int(time.monotonic() - inicio)}
+        def progresso(etapa, segundos=None, ponto=None, pontos=None):
+            self.progresso[busca_id] = {"etapa": etapa, "segundos": int(time.monotonic() - inicio), "ponto": ponto}
 
         conn = banco.abrir(self.caminho_banco)
         try:

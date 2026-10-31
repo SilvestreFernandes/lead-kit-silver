@@ -5,6 +5,7 @@ import http.client
 import io
 import json
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -13,6 +14,7 @@ from pathlib import Path
 
 from kit import banco, limpeza, servidor
 from kit import motor as motor_mod
+from kit.geocodificar import CidadeNaoEncontrada
 from testes.fixtures import (GeoDeMentira, MotorDeMentira, csv_texto, leads_em_massa, linha, perfil_ficticio)
 
 TOKEN = "token-de-teste-123"
@@ -41,8 +43,8 @@ class Base(unittest.TestCase):
 
     def setUp(self):
         # No Windows um arquivo recem-criado pode ficar preso por instantes (antivirus, indexador).
-        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
-        self.addCleanup(self._tmp.cleanup)
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.apagar_pasta_temporaria)
         self.raiz = Path(self._tmp.name)
         self.dados, self.painel = self.raiz / "dados", self.raiz / "painel"
         self.dados.mkdir()
@@ -60,15 +62,42 @@ class Base(unittest.TestCase):
         if self.com_leads:
             self.popular_banco()
 
+    def diagnostico_falso(self, motor):
+        """Nos testes nunca se roda `docker info` de verdade."""
+        from kit import diagnostico as d
+        return None if motor.no_ar() else {"estado": "motor_parado", **d.DIAGNOSTICOS["motor_parado"]}
+
     def iniciar_servidor(self):
         self.srv = servidor.Servidor(porta=0, pasta_dados=self.dados, pasta_painel=self.painel,
-                                     motor=self.motor, geo=self.geo, token=TOKEN)
+                                     motor=self.motor, geo=self.geo, token=TOKEN, diagnostico=self.diagnostico_falso)
         self.porta = self.srv.porta
         threading.Thread(target=self.srv.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         self.addCleanup(self.parar_servidor, self.srv)
 
+    def apagar_pasta_temporaria(self, tentativas=8):
+        """Apaga a pasta do teste. No Windows o banco pode ficar preso por instantes, entao tenta de novo.
+
+        Se mesmo assim nao der, escreve a mensagem completa do erro (nao e falha de teste: a pasta fica no
+        temp do sistema), para a causa poder ser investigada.
+        """
+        for n in range(1, tentativas + 1):
+            try:
+                shutil.rmtree(self._tmp.name)
+                return
+            except FileNotFoundError:
+                return
+            except OSError as e:
+                erro = e
+                time.sleep(0.25 * n)
+        sys.stderr.write("\n[aviso] nao consegui apagar " + self._tmp.name + f" depois de {tentativas} tentativas: "
+                         f"{type(erro).__name__}: {erro}\n")
+
     @staticmethod
     def parar_servidor(srv):
+        # Uma busca iniciada pelo teste pode ainda estar gravando no banco: espera ela acabar antes de fechar.
+        fim = time.time() + 15
+        while srv.busca_ativa is not None and time.time() < fim:
+            time.sleep(0.05)
         srv.shutdown()
         srv.server_close()
 
@@ -1020,6 +1049,104 @@ class TestFiltrosRapidosNaApi(Base):
         r = self.ler("/api/exportar?formato=xlsx&excluidos=todos&sem_site=1&celular=1", token=TOKEN)
         linhas = len(_re.findall(r"<row ", zipfile.ZipFile(io.BytesIO(r.corpo)).read("xl/worksheets/sheet1.xml").decode("utf-8"))) - 1
         self.assertEqual(linhas, self.lista("&sem_site=1&celular=1")["total"])
+
+
+class TestEtapa4NoServidor(Base):
+    com_leads = False
+
+    def criar(self, **extra):
+        return self.escrever("POST", "/api/buscas", {**CORPO_BUSCA, **extra})
+
+    def test_estado_traz_o_motivo_quando_o_motor_esta_desligado(self):
+        self.motor.ligado = False
+        d = self.ler("/api/estado").json
+        self.assertFalse(d["motor_no_ar"])
+        self.assertEqual(d["motor_diagnostico"]["estado"], "motor_parado")
+        self.assertEqual(d["motor_diagnostico"]["comando"], "docker compose up -d")
+
+    def test_estado_sem_diagnostico_quando_o_motor_esta_no_ar(self):
+        d = self.ler("/api/estado").json
+        self.assertTrue(d["motor_no_ar"])
+        self.assertIsNone(d["motor_diagnostico"])
+
+    def test_docker_parado_aparece_no_estado_e_no_503(self):
+        from kit import diagnostico as dg
+        self.srv.diagnostico = lambda motor: {"estado": "docker_parado", **dg.DIAGNOSTICOS["docker_parado"]}
+        self.motor.ligado = False
+        self.assertEqual(self.ler("/api/estado").json["motor_diagnostico"]["estado"], "docker_parado")
+        r = self.criar()
+        self.assertEqual(r.status, 503)
+        self.assertIn("O Docker está desligado", r.json["erro"])
+        self.assertIn("Abra o Docker Desktop", r.json["erro"])
+        self.assertEqual(r.json["motor_diagnostico"]["estado"], "docker_parado")
+
+    def test_503_por_motor_parado_diz_o_comando(self):
+        self.motor.ligado = False
+        r = self.criar()
+        self.assertEqual(r.status, 503)
+        self.assertIn("docker compose up -d", r.json["erro"])
+
+    def test_busca_publica_traz_contagens_e_tempo_estimado(self):
+        bid = self.criar().json["id"]
+        d = self.esperar_busca(bid)
+        self.assertEqual((d["total_leads"], d["novos"], d["ja_existiam"], d["fora_da_lista"]), (11, 11, 0, 4))
+        self.assertEqual((d["pontos"], d["tempo_estimado"]), (1, "cerca de 1 minuto"))
+        self.assertTrue(d["criada_em"] and d["terminou_em"])
+        self.assertIsNone(d["erro_tipo"])
+        segunda = self.esperar_busca(self.criar().json["id"])
+        self.assertEqual((segunda["novos"], segunda["ja_existiam"]), (0, 11))
+
+    def test_busca_com_erro_traz_o_tipo(self):
+        self.geo.erro = CidadeNaoEncontrada("Não achei a cidade X-DF. Confira o nome e a sigla do estado.")
+        d = self.esperar_busca(self.criar().json["id"])
+        self.assertEqual((d["status"], d["erro_tipo"]), ("erro", "cidade"))
+        self.assertIn("Não achei a cidade", d["erro"])
+
+    def test_resultado_zero_nao_e_erro(self):
+        self.motor.csv = csv_texto([])
+        d = self.esperar_busca(self.criar().json["id"])
+        self.assertEqual((d["status"], d["total_leads"], d["erro"], d["erro_tipo"]), ("ok", 0, None, None))
+
+    def test_ponto_atual_aparece_durante_a_busca_media(self):
+        self.motor.segurar = threading.Event()
+        self.srv.dormir = lambda s: None
+        bid = self.criar(tamanho="media").json["id"]
+        d = self.ler(f"/api/buscas/{bid}").json
+        fim = time.time() + 5
+        while d["etapa"] != "Esperando o motor (ponto 1 de 5)" and time.time() < fim:
+            time.sleep(0.02)
+            d = self.ler(f"/api/buscas/{bid}").json
+        self.assertEqual((d["status"], d["ponto"], d["pontos"]), ("working", 1, 5))
+        self.assertEqual(d["tempo_estimado"], "cerca de 5 a 6 minutos")
+        self.motor.segurar.set()
+        self.esperar_busca(bid)
+
+    def test_busca_em_andamento_continua_depois_de_recarregar_a_pagina(self):
+        self.motor.segurar = threading.Event()
+        bid = self.criar().json["id"]
+        # "recarregar a pagina" = outro cliente perguntando de novo: o estado vem do servidor
+        self.assertEqual(self.ler("/api/estado").json["busca_em_andamento"], bid)
+        r = self.criar(categoria="restaurante")
+        self.assertEqual((r.status, r.json["busca_em_andamento"]), (409, bid))
+        self.motor.segurar.set()
+        self.esperar_busca(bid)
+
+    def test_nao_existe_rota_de_cancelar_busca(self):
+        bid = self.criar().json["id"]
+        self.esperar_busca(bid)
+        for metodo, caminho in (("DELETE", f"/api/buscas/{bid}"), ("PUT", f"/api/buscas/{bid}"),
+                                ("PATCH", f"/api/buscas/{bid}")):
+            self.assertEqual(self.escrever(metodo, caminho).status, 405, caminho)
+        for caminho in (f"/api/buscas/{bid}/cancelar", f"/api/buscas/{bid}/cancel", "/api/buscas/cancelar"):
+            self.assertIn(self.escrever("POST", caminho).status, (404, 405), caminho)
+        rotas = {(m, regex.pattern) for m, regex, _f, _e in servidor.ROTAS}
+        self.assertFalse([r for r in rotas if "cancel" in r[1].lower() or r[0] == "DELETE"])
+
+    def test_opcoes_trazem_o_tempo_estimado_de_cada_tamanho(self):
+        d = self.ler("/api/opcoes").json
+        self.assertEqual({t["id"]: t["tempo_estimado"] for t in d["tamanhos"]},
+                         {"rapida": "cerca de 1 minuto", "media": "cerca de 5 a 6 minutos"})
+        self.assertEqual(d["tamanhos_em_breve"], ["ampla"])
 
 
 if __name__ == "__main__":

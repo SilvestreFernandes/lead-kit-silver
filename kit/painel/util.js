@@ -76,13 +76,13 @@ export function textoDaFalha(tipo, mensagemDoServidor) {
   switch (tipo) {
     case 'rede':
       return { titulo: 'O kit parou de responder',
-        texto: 'Ele pode ter sido fechado. Ligue de novo com o comando abaixo e clique em Tentar de novo.' };
+        texto: 'Ele pode ter sido fechado. Siga o passo a passo abaixo para ligar de novo e clique em Tentar de novo.' };
     case 'token':
       return { titulo: 'A página ficou desatualizada',
         texto: 'O kit foi reiniciado depois que você abriu esta página. Recarregue a página para continuar.' };
     case 'servidor':
       return { titulo: 'Algo deu errado dentro do kit',
-        texto: 'Veja a janela onde o kit está rodando. Se o problema continuar, feche e abra o kit de novo.' };
+        texto: 'Olhe a janela escura onde o kit está rodando: ela mostra o que aconteceu. Se o problema continuar, feche essa janela e ligue o kit de novo pelo passo a passo.' };
     case 'recusado':
       return { titulo: 'Pedido recusado', texto: mensagemDoServidor || 'O kit recusou este pedido.' };
     default:
@@ -90,8 +90,7 @@ export function textoDaFalha(tipo, mensagemDoServidor) {
   }
 }
 
-export const COMANDO_LIGAR_KIT = 'python kit/servidor.py';
-export const COMANDO_LIGAR_MOTOR = 'docker compose up -d';
+export { COMANDO_LIGAR_KIT, COMANDO_LIGAR_MOTOR } from './instrucoes.js';
 
 // ---------- Leads
 
@@ -198,4 +197,191 @@ export function urlSegura(url) {
   } catch (erro) {
     return null;
   }
+}
+
+// ---------- Buscar
+
+export const LIMITE_TEXTO_BUSCA = 80;
+export const ROTULOS_DE_TAMANHO = { rapida: 'Rápida', media: 'Média', ampla: 'Ampla' };
+
+// "Brasília-DF", "Brasília - DF", "Brasília, DF" e "Brasília/DF" viram { cidade, uf }. Outra coisa
+// (por exemplo "todo o Brasil") não é cidade e devolve null.
+export function parseRegiao(texto, ufs) {
+  const achou = /^(.+?)\s*[-,/]\s*([A-Za-z]{2})$/.exec(String(texto || '').trim());
+  if (!achou) return null;
+  const uf = achou[2].toUpperCase();
+  const cidade = achou[1].trim();
+  if (!cidade || cidade.length > LIMITE_TEXTO_BUSCA) return null;
+  if (ufs && !ufs.includes(uf)) return null;
+  return { cidade, uf };
+}
+
+// Sugestões tiradas do perfil. A pessoa pode escrever qualquer outra coisa.
+export function sugestoesDeCidade(perfil, ufs) {
+  const vistos = new Set();
+  const saida = [];
+  const regioes = perfil && perfil.cliente && perfil.cliente.regioes;
+  for (const regiao of (Array.isArray(regioes) ? regioes : [])) {
+    const r = parseRegiao(regiao, ufs);
+    if (!r) continue;
+    const chave = `${r.cidade.toLowerCase()}|${r.uf}`;
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    saida.push({ ...r, rotulo: `${r.cidade}-${r.uf}` });
+  }
+  return saida.slice(0, 8);
+}
+
+export function sugestoesDeCategoria(perfil) {
+  const vistos = new Set();
+  const saida = [];
+  const tipos = perfil && perfil.cliente && perfil.cliente.tipos;
+  for (const tipo of (Array.isArray(tipos) ? tipos : [])) {
+    const texto = String(tipo || '').trim();
+    if (!texto || texto.length > LIMITE_TEXTO_BUSCA || vistos.has(texto.toLowerCase())) continue;
+    vistos.add(texto.toLowerCase());
+    saida.push(texto);
+  }
+  return saida.slice(0, 12);
+}
+
+// Confere o formulário antes de enviar. Devolve { campo: mensagem } só dos campos com problema.
+export function validarBusca({ categoria, cidade, uf }, ufs) {
+  const erros = {};
+  const c = String(categoria || '').trim();
+  const d = String(cidade || '').trim();
+  if (!c) erros.categoria = 'Escreva o tipo de negócio que você quer procurar. Exemplo: padaria.';
+  else if (c.length > LIMITE_TEXTO_BUSCA) erros.categoria = `O tipo de negócio está grande demais (no máximo ${LIMITE_TEXTO_BUSCA} letras).`;
+  if (!d) erros.cidade = 'Escreva o nome da cidade.';
+  else if (d.length > LIMITE_TEXTO_BUSCA) erros.cidade = `O nome da cidade está grande demais (no máximo ${LIMITE_TEXTO_BUSCA} letras).`;
+  if (!uf || (ufs && !ufs.includes(uf))) erros.uf = 'Escolha o estado.';
+  return erros;
+}
+
+export function formatarDuracao(segundos) {
+  const total = Math.max(0, Math.round(Number(segundos) || 0));
+  if (total < 60) return `${total} s`;
+  const minutos = Math.floor(total / 60);
+  const resto = total % 60;
+  if (minutos < 60) return resto ? `${minutos} min ${resto} s` : `${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  return `${horas} h ${minutos % 60} min`;
+}
+
+// Quanto durou uma busca terminada, em segundos, ou null.
+export function duracaoDaBusca(busca) {
+  if (!busca || !busca.criada_em || !busca.terminou_em) return null;
+  const inicio = Date.parse(busca.criada_em);
+  const fim = Date.parse(busca.terminou_em);
+  return Number.isNaN(inicio) || Number.isNaN(fim) || fim < inicio ? null : Math.round((fim - inicio) / 1000);
+}
+
+// "hoje às 14:32", "ontem às 09:05" ou "28/10 às 16:40".
+export function quandoFoi(iso, agora) {
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return '';
+  const ref = agora || new Date();
+  const dois = (n) => String(n).padStart(2, '0');
+  const hora = `${dois(data.getHours())}:${dois(data.getMinutes())}`;
+  const dia = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const ontem = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - 1);
+  if (dia(data) === dia(ref)) return `hoje às ${hora}`;
+  if (dia(data) === dia(ontem)) return `ontem às ${hora}`;
+  return `${dois(data.getDate())}/${dois(data.getMonth() + 1)} às ${hora}`;
+}
+
+export function descreverBusca(busca) {
+  return `${busca.categoria} em ${busca.cidade}-${busca.uf}`;
+}
+
+export const ETAPAS_DA_BUSCA = [
+  'Achando a cidade no mapa', 'Enviando a busca ao motor', 'Esperando o motor', 'Lendo os resultados', 'Calculando as notas',
+];
+
+// Em qual das ETAPAS_DA_BUSCA a busca está (-1 se ainda não se sabe).
+export function indiceDaEtapa(etapa) {
+  const texto = String(etapa || '');
+  if (texto.startsWith('Achando')) return 0;
+  if (texto.startsWith('Enviando')) return 1;
+  if (texto.startsWith('Esperando') || texto.startsWith('Pausa')) return 2;
+  if (texto.startsWith('Lendo')) return 3;
+  if (texto.startsWith('Calculando')) return 4;
+  return -1;
+}
+
+// Porcentagem pelos pontos já concluídos. Busca de um ponto só não tem como dizer: devolve null
+// (a tela mostra uma barra sem fim definido, em vez de inventar um número).
+export function percentualDaBusca(busca) {
+  if (!busca || !busca.pontos || busca.pontos < 2) return null;
+  if (indiceDaEtapa(busca.etapa) === 4) return 100;
+  const atual = Math.max(1, busca.ponto || 1);
+  return Math.round(((atual - 1) / busca.pontos) * 100);
+}
+
+export const DICAS_DE_RESULTADO_ZERO = [
+  'Confira se o nome da cidade e o estado estão certos.',
+  'Tente outro termo, mais comum ou mais simples. Por exemplo, "padaria" em vez de "panificadora".',
+  'Tente de novo daqui a alguns minutos. O Google nem sempre responde igual.',
+  'Se acontecer com várias cidades e vários termos, o Google pode ter mudado a página e o kit pode precisar de uma atualização. Nesse caso, procure uma versão mais nova do kit.',
+];
+
+const ERROS_DA_BUSCA = {
+  cidade: ['Não achei essa cidade',
+    'Confira o nome da cidade e o estado. Use o nome como aparece no mapa, por exemplo "Brasília" e "DF".'],
+  servico_de_mapas: ['Não consegui falar com o serviço de localização',
+    'O kit usa esse serviço só para achar a cidade no mapa. Confira a sua conexão com a internet e tente de novo.'],
+  motor: ['O motor de busca não respondeu',
+    'Confira se o Docker e o motor estão ligados (o aviso no topo mostra o que fazer) e tente de novo.'],
+  formato: ['O motor devolveu o resultado num formato que o kit não conhece',
+    'O motor pode ter sido atualizado ou o Google pode ter mudado. Se o erro se repetir, o kit precisa de uma atualização. Nada seu foi perdido.'],
+  parcial: ['A busca parou no meio',
+    'O que já tinha chegado foi salvo e está em Leads. Você pode ver esses leads agora e refazer a busca mais tarde.'],
+  interrompida: ['A busca foi interrompida',
+    'O kit foi fechado enquanto ela rodava. Abra o kit de novo e refaça a busca. O que já tinha sido salvo continua em Leads.'],
+};
+
+export function textoDoErroDaBusca(busca) {
+  const achado = ERROS_DA_BUSCA[busca && busca.erro_tipo];
+  if (achado) return { titulo: achado[0], dica: achado[1] };
+  return { titulo: 'Algo deu errado na busca',
+    dica: 'Olhe a janela escura onde o kit está rodando: ela mostra o que aconteceu. Tente de novo. Se repetir, o kit pode precisar de uma atualização.' };
+}
+
+// O que mostrar quando uma busca termina. tipo: 'sucesso' | 'vazio' | 'parcial' | 'erro'.
+// Resultado zero NUNCA é sucesso. As contagens vêm do servidor: novos, ja_existiam e fora_da_lista.
+export function resumoDaBusca(busca) {
+  const total = busca.total_leads || 0;
+  const duracao = duracaoDaBusca(busca);
+  const tempo = duracao === null ? '' : `A busca levou ${formatarDuracao(duracao)}.`;
+  if (busca.status === 'erro') {
+    const { titulo, dica } = textoDoErroDaBusca(busca);
+    const parcial = busca.erro_tipo === 'parcial';
+    return { tipo: parcial ? 'parcial' : 'erro', titulo, texto: dica, detalhe: busca.erro || '',
+      linhas: parcial ? linhasDeContagem(busca) : [], dicas: [], tempo, temLeads: total > 0 };
+  }
+  if (total === 0) {
+    return { tipo: 'vazio', titulo: 'Nenhum negócio encontrado',
+      texto: 'A busca terminou, mas não trouxe nenhum negócio. Isto não é um sucesso: pode ser a cidade, o termo da busca ou uma mudança no Google.',
+      detalhe: '', linhas: [], dicas: DICAS_DE_RESULTADO_ZERO.slice(), tempo, temLeads: false };
+  }
+  return { tipo: 'sucesso', titulo: `Busca concluída: ${total} ${plural(total, 'negócio encontrado', 'negócios encontrados')}`,
+    texto: '', detalhe: '', linhas: linhasDeContagem(busca), dicas: [], tempo, temLeads: true };
+}
+
+function linhasDeContagem(busca) {
+  const { novos, ja_existiam: jaExistiam, fora_da_lista: fora } = busca;
+  const linhas = [];
+  if (novos !== null && novos !== undefined) {
+    linhas.push(`${novos} ${plural(novos, 'negócio novo', 'negócios novos')}, que ainda não estavam no kit.`);
+  }
+  if (jaExistiam !== null && jaExistiam !== undefined) {
+    linhas.push(`${jaExistiam} ${plural(jaExistiam, 'já existia', 'já existiam')} de buscas anteriores.`);
+  }
+  if (fora !== null && fora !== undefined) {
+    linhas.push(fora === 0
+      ? 'Nenhum ficou fora da lista pelas exclusões do seu perfil.'
+      : `${fora} ${plural(fora, 'ficou fora da lista', 'ficaram fora da lista')} pelas exclusões do seu perfil (por exemplo, sem telefone ou possível rede).`);
+  }
+  if (novos === 0 && (busca.total_leads || 0) > 0) linhas.push('Nenhum negócio novo: todos já estavam no kit.');
+  return linhas;
 }

@@ -22,6 +22,10 @@ class ErroGeocodificacao(Exception):
     """Nao deu pra achar a cidade."""
 
 
+class CidadeNaoEncontrada(ErroGeocodificacao):
+    """O servico respondeu, mas nao conhece essa cidade nesse estado."""
+
+
 class Geocodificador:
     def __init__(self, arquivo_cache=None, abrir_url=None, relogio=time.monotonic, dormir=time.sleep):
         self.arquivo_cache = Path(arquivo_cache) if arquivo_cache else None
@@ -69,13 +73,19 @@ class Geocodificador:
         try:
             corpo = self._abrir_url(f"{URL}?{params}", {"User-Agent": USER_AGENT, "Accept-Language": "pt-BR"})
             achados = json.loads(corpo)
+        except urllib.error.HTTPError as e:
+            if e.code in (403, 429):
+                raise ErroGeocodificacao("O serviço de mapas que acha a cidade pediu para esperar um pouco. "
+                                         "Tente de novo daqui a alguns minutos.")
+            raise ErroGeocodificacao("O serviço de mapas que acha a cidade está com problema agora. "
+                                     "Tente de novo daqui a pouco.")
         except (urllib.error.URLError, OSError):
             raise ErroGeocodificacao("Não consegui falar com o serviço de mapas para achar a cidade. "
                                      "Confira a internet e tente de novo.")
         except json.JSONDecodeError:
             raise ErroGeocodificacao("O serviço de mapas respondeu algo que não entendi. Tente de novo daqui a pouco.")
         if not achados:
-            raise ErroGeocodificacao(f"Não achei a cidade {cidade}-{uf}. Confira o nome e a sigla do estado.")
+            raise CidadeNaoEncontrada(f"Não achei a cidade {cidade}-{uf}. Confira o nome e a sigla do estado.")
         try:
             resultado = (float(achados[0]["lat"]), float(achados[0]["lon"]))
         except (KeyError, ValueError, TypeError):

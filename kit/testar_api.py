@@ -90,7 +90,7 @@ def mostrar_leads(leads, saida=print):
 def comando_estado(c, a, saida):
     d = c.ler("/api/estado")
     saida(f"Versão do kit: {d['versao_kit']}")
-    saida(f"Motor de busca: {'ligado' if d['motor_no_ar'] else 'DESLIGADO (docker compose up -d)'}")
+    saida(f"Buscador: {'ligado' if d['motor_no_ar'] else 'DESLIGADO (docker compose up -d)'}")
     p = d["perfil"]
     saida(f"Perfil: {'válido' if p['valido'] else 'NÃO válido' if p['existe'] else 'não existe'}")
     for e in p["erros"]:

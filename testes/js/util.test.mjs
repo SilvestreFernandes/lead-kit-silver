@@ -337,3 +337,12 @@ test('filtrosAtivos só conta o que difere do padrão', () => {
   assert.deepEqual(util.filtrosAtivos({ ...util.FILTROS_PADRAO, letra: 'B', busca: 3 }), ['letra', 'busca']);
   assert.deepEqual(util.filtrosAtivos(null), []);
 });
+
+test('menu: as setas para cima e para baixo também trocam de aba (menu lateral)', () => {
+  assert.equal(util.abaVizinha('buscar', 'ArrowDown'), 'leads');
+  assert.equal(util.abaVizinha('leads', 'ArrowUp'), 'buscar');
+  assert.equal(util.abaVizinha('buscar', 'ArrowUp'), 'oferta');
+  assert.equal(util.abaVizinha('oferta', 'ArrowDown'), 'buscar');
+  assert.equal(util.abaVizinha('leads', 'ArrowRight'), 'oferta');
+  assert.equal(util.abaVizinha('leads', 'x'), null);
+});

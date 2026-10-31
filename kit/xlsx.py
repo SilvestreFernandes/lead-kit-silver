@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 from xml.sax.saxutils import escape, quoteattr
 
+from kit import produto
+
 LIMITE_TEXTO = 32000       # o Excel aceita 32767 caracteres por celula
 LIMITE_URL = 2000          # o Excel aceita links de ate 2079 caracteres
 PROIBIDOS_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]")
@@ -136,7 +138,7 @@ def _celula_xml(ref, valor, estilo):
     return f'<c r="{ref}" s="{s}" t="inlineStr"><is><t xml:space="preserve">{escape(limpar_texto(valor))}</t></is></c>'
 
 
-def gerar(colunas, linhas, nome_aba="Leads", titulo_documento="Lead Kit Silver"):
+def gerar(colunas, linhas, nome_aba="Leads", titulo_documento=produto.NOME):
     """Devolve os bytes de um .xlsx. `linhas` e uma lista de listas (valor ou Celula)."""
     n_col = len(colunas)
     ultima = letra_da_coluna(n_col - 1)
@@ -232,12 +234,12 @@ def gerar(colunas, linhas, nome_aba="Leads", titulo_documento="Lead Kit Silver")
             '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
             'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '
             'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-            f'<dc:title>{escape(titulo_documento)}</dc:title><dc:creator>Lead Kit Silver</dc:creator>'
+            f'<dc:title>{escape(titulo_documento)}</dc:title><dc:creator>{escape(produto.NOME)}</dc:creator>'
             f'<dcterms:created xsi:type="dcterms:W3CDTF">{agora}</dcterms:created></cp:coreProperties>'),
         "docProps/app.xml": (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
             '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
-            '<Application>Lead Kit Silver</Application></Properties>'),
+            f'<Application>{escape(produto.NOME)}</Application></Properties>'),
         "xl/workbook.xml": pasta,
         "xl/_rels/workbook.xml.rels": (
             f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="{NS_REL}">'

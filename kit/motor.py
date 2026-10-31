@@ -39,7 +39,7 @@ class ErroMotor(Exception):
 def _conferir_endereco(base):
     host = urllib.parse.urlparse(base).hostname
     if host not in ("127.0.0.1", "localhost"):
-        raise ErroMotor("O motor só pode ficar no próprio computador (127.0.0.1).")
+        raise ErroMotor("O buscador só pode ficar no próprio computador (127.0.0.1).")
 
 
 class Motor:
@@ -63,9 +63,9 @@ class Motor:
             return self._abrir(req)
         except urllib.error.HTTPError as e:
             detalhe = e.read().decode("utf-8", "replace")[:300]
-            raise ErroMotor(f"O motor recusou o pedido ({e.code}): {detalhe}")
+            raise ErroMotor(f"O buscador recusou o pedido ({e.code}): {detalhe}")
         except (urllib.error.URLError, OSError):
-            raise ErroMotor("O motor não está respondendo. Suba ele com: docker compose up -d "
+            raise ErroMotor("O buscador não está respondendo. Ligue ele com: docker compose up -d "
                             "(e espere uns segundos).")
 
     def no_ar(self):
@@ -90,7 +90,7 @@ class Motor:
         try:
             return json.loads(corpo)["id"]
         except (KeyError, ValueError, TypeError):
-            raise ErroMotor(f"O motor respondeu ({status}) mas não devolveu o número da busca.")
+            raise ErroMotor(f"O buscador respondeu ({status}) mas não devolveu o número da busca.")
 
     def status(self, job_id):
         _, corpo = self._chamar(f"/api/v1/jobs/{job_id}")

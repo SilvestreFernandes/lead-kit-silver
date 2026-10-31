@@ -5,7 +5,7 @@ import { el } from './dom.js';
 import { escrever, ErroApi } from './api.js';
 
 export const INTERVALO_LIGANDO_MS = 3000;
-export const TEXTO_LIGANDO = 'Ligando o motor. Pode levar alguns minutos, principalmente na primeira vez, porque o Docker pode precisar baixar o motor. Pode deixar esta página aberta.';
+export const TEXTO_LIGANDO = 'Ligando o buscador. Pode levar alguns minutos, principalmente na primeira vez, porque o Docker pode precisar baixar o buscador. Pode deixar esta página aberta.';
 
 export function podeLigarPeloPainel(estado) {
   const d = estado && estado.motor_diagnostico;
@@ -47,7 +47,7 @@ export function criarLigarMotor({ estado, atualizarEstado, avisar }) {
   if (!podeLigarPeloPainel(estado)) return null;
   const situacao = estado.ligando_motor;
   const ligando = estaLigando(estado);
-  const botao = el('button', { class: 'btn btn-primary', type: 'button', disabled: ligando || null }, 'Ligar o motor');
+  const botao = el('button', { class: 'btn btn-primary', type: 'button', disabled: ligando || null }, 'Ligar o buscador');
   botao.addEventListener('click', async () => {
     botao.disabled = true;
     try {
@@ -60,6 +60,6 @@ export function criarLigarMotor({ estado, atualizarEstado, avisar }) {
   });
   return el('div', { class: 'ligar-motor' },
     ligando ? el('p', { class: 'ligando', role: 'status' }, situacao.mensagem || TEXTO_LIGANDO) : null,
-    !ligando && situacao ? el('p', { class: situacao.estado === 'erro' ? 'erro-simples' : 'nota' }, situacao.mensagem) : null,
+    !ligando && situacao ? el('p', { class: situacao.estado === 'erro' ? 'erro-simples' : 'note' }, situacao.mensagem) : null,
     el('div', { class: 'acoes' }, botao));
 }

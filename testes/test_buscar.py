@@ -136,8 +136,8 @@ class TestBuscar(unittest.TestCase):
         buscar.executar_busca(conn, bid, perfil_ficticio(), MotorDeMentira(), GeoDeMentira(),
                               lambda etapa, seg=None, *_: etapas.append(etapa))
         sem_repeticao = [e for i, e in enumerate(etapas) if i == 0 or e != etapas[i - 1]]
-        self.assertEqual(sem_repeticao, ["Achando a cidade no mapa", "Enviando a busca ao motor",
-                                         "Esperando o motor", "Lendo os resultados",
+        self.assertEqual(sem_repeticao, ["Achando a cidade no mapa", "Enviando a busca",
+                                         "Esperando o buscador", "Lendo os resultados",
                                          "Calculando as notas"])
 
     def test_erro_inesperado_tambem_marca_a_busca(self):
@@ -217,8 +217,8 @@ class TestBuscaMedia(unittest.TestCase):
 
     def test_progresso_diz_em_que_ponto_esta(self):
         self.rodar(MotorDeMentira(csv=self.csvs))
-        self.assertIn("Esperando o motor (ponto 1 de 5)", self.etapas)
-        self.assertIn("Esperando o motor (ponto 5 de 5)", self.etapas)
+        self.assertIn("Esperando o buscador (ponto 1 de 5)", self.etapas)
+        self.assertIn("Esperando o buscador (ponto 5 de 5)", self.etapas)
         self.assertIn("Pausa entre os pontos (ponto 2 de 5)", self.etapas)
 
     def test_rapida_continua_sendo_um_job_sem_pausa_e_sem_texto_de_ponto(self):
@@ -361,7 +361,7 @@ class TestContagensEErrosDaBusca(unittest.TestCase):
                               lambda etapa, seg=None, ponto=None, pontos=None: visto.append((etapa, ponto, pontos)),
                               dormir=lambda s: None)
         self.assertEqual(visto[0], ("Achando a cidade no mapa", 0, 5))
-        esperando = [v for v in visto if v[0].startswith("Esperando o motor")]
+        esperando = [v for v in visto if v[0].startswith("Esperando o buscador")]
         self.assertEqual([p for _, p, _ in esperando], [1, 2, 3, 4, 5])
         self.assertTrue(all(total == 5 for _, _, total in visto[1:]))
         rapida = []

@@ -16,6 +16,8 @@ ARQUIVOS = sorted(p for p in PAINEL.rglob("*") if p.is_file())
 CODIGO = [p for p in ARQUIVOS if p.suffix in (".html", ".js", ".css")]
 JS = [p for p in ARQUIVOS if p.suffix == ".js"]
 HTML = [p for p in ARQUIVOS if p.suffix == ".html"]
+# Unico texto de terceiros dentro do painel: a licenca das fontes (SIL OFL), exatamente como foi publicada.
+LICENCAS_DE_TERCEIROS = [PAINEL / "fontes" / "LICENCA-IBM-Plex.txt"]
 
 # Unicas URLs externas que o painel pode citar (abrir conversa no WhatsApp, quando a tela de leads existir).
 URLS_PERMITIDAS = ("https://wa.me/",)
@@ -80,8 +82,8 @@ class TestSegurancaDoCodigo(unittest.TestCase):
 
     def test_sem_travessao_em_nenhum_texto(self):
         for p in ARQUIVOS:
-            if p.suffix in (".png", ".ico"):
-                continue
+            if p.suffix in (".png", ".ico", ".woff2") or p in LICENCAS_DE_TERCEIROS:
+                continue  # binarios e o texto de licenca das fontes, que e de terceiros e nao se reescreve
             texto = ler(p)
             self.assertNotIn("—", texto, p.name)  # travessao
             self.assertNotIn("–", texto, p.name)  # traco medio
@@ -95,7 +97,7 @@ class TestPaginaEImportacoes(unittest.TestCase):
         self.assertIn('<html lang="pt-BR">', self.html)
         self.assertIn('name="viewport"', self.html)
         self.assertIn('name="token" content="{{TOKEN}}"', self.html)
-        self.assertIn("<title>Lead Kit Silver</title>", self.html)
+        self.assertIn("<title>{{NOME}}</title>", self.html)
         self.assertIn('rel="icon"', self.html)
 
     def test_tudo_que_o_html_referencia_existe(self):
@@ -171,7 +173,8 @@ class TestPainelServidoDeVerdade(unittest.TestCase):
             return r.status, r.headers["Content-Type"], r.read()
 
     def test_todo_arquivo_do_painel_e_servido_com_o_tipo_certo(self):
-        esperado = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml"}
+        esperado = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml",
+                    ".woff2": "font/woff2", ".txt": "text/plain"}
         for p in ARQUIVOS:
             caminho = "/" + p.relative_to(PAINEL).as_posix()
             status, tipo, _ = self.baixar(caminho)

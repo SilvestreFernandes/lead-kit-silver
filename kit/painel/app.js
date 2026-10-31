@@ -91,11 +91,11 @@ function observarEstado(funcao) {
 
 function desenharMotor() {
   let estado = 'verificando';
-  let texto = 'Verificando o motor';
+  let texto = 'Verificando o buscador';
   if (app.carregou) {
     if (app.falha && app.falha.tipo === 'rede') { estado = 'parado'; texto = 'Kit parado'; }
-    else if (app.estado && app.estado.motor_no_ar) { estado = 'ligado'; texto = 'Motor local ligado'; }
-    else if (app.estado) { estado = 'desligado'; texto = 'Motor desligado'; }
+    else if (app.estado && app.estado.motor_no_ar) { estado = 'ligado'; texto = 'Buscador ligado'; }
+    else if (app.estado) { estado = 'desligado'; texto = 'Buscador desligado'; }
     else { estado = 'parado'; texto = 'Sem resposta do kit'; }
   }
   area.motor.dataset.estado = estado;

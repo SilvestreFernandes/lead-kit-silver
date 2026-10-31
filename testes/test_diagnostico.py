@@ -36,7 +36,7 @@ class TestDiagnosticar(unittest.TestCase):
         d = diagnostico.diagnosticar(MotorFalso(False), Executor(retorno=0))
         self.assertEqual(d["estado"], "motor_parado")
         self.assertEqual(d["comando"], "docker compose up -d")
-        self.assertIn("O Docker está ligado, mas o motor de busca não", d["texto"])
+        self.assertIn("O Docker está ligado, mas o buscador não", d["texto"])
         self.assertTrue(any("digite powershell e aperte Enter" in p for p in d["passos"]))
 
     def test_docker_desligado(self):

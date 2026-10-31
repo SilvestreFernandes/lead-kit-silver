@@ -11,6 +11,7 @@ Uso:  python kit/servidor.py
 """
 import argparse
 import hmac
+import html
 import json
 import os
 import re
@@ -29,6 +30,7 @@ if str(RAIZ) not in sys.path:
 
 from kit import banco, buscar, consulta, diagnostico as diagnostico_mod, modelos, motor as motor_mod, validar_perfil  # noqa: E402
 from kit.geocodificar import Geocodificador  # noqa: E402
+from kit import produto  # noqa: E402
 from kit.ligar_motor import LigadorDoMotor  # noqa: E402
 
 VERSAO = "0.2.0-dev"
@@ -42,7 +44,7 @@ UFS = ("AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "
 # para outro tipo no registro do sistema.
 TIPOS_ESTATICOS = {
     ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml",
-    ".png": "image/png", ".ico": "image/x-icon", ".txt": "text/plain",
+    ".png": "image/png", ".ico": "image/x-icon", ".txt": "text/plain", ".woff2": "font/woff2",
 }
 EXTENSOES_ESTATICAS = set(TIPOS_ESTATICOS)
 CABECALHOS_SEGUROS = {
@@ -276,12 +278,12 @@ def rota_busca_criar(srv, params, consulta_, corpo):
 def rota_motor_ligar(srv, params, consulta_, corpo):
     """Liga o motor com um comando fixo. Responde na hora; o painel acompanha pelo /api/estado."""
     if srv.motor.no_ar():
-        raise Erro(409, "O motor já está ligado.")
+        raise Erro(409, "O buscador já está ligado.")
     if srv.ligador.esta_ligando():
         return 202, {"estado": "ligando"}
     motivo = srv.diagnostico(srv.motor)
     if motivo is None:
-        raise Erro(409, "O motor já está ligado.")
+        raise Erro(409, "O buscador já está ligado.")
     if motivo["estado"] != "motor_parado":
         # Docker fechado ou ausente: o botao nao resolveria. A tela mostra o passo a passo manual.
         raise Erro(409, diagnostico_mod.mensagem_completa(motivo), motor_diagnostico=motivo)
@@ -559,6 +561,7 @@ class Servidor(ThreadingHTTPServer):
         tipo = TIPOS_ESTATICOS[alvo.suffix.lower()]
         if alvo.suffix.lower() == ".html":
             dados = dados.replace(b"{{TOKEN}}", self.token.encode("ascii"))
+            dados = dados.replace(b"{{NOME}}", html.escape(produto.NOME).encode("utf-8"))
         if tipo.startswith("text/") or tipo == "image/svg+xml":
             tipo += "; charset=utf-8"
         return Resposta(200, dados, tipo)
@@ -579,7 +582,7 @@ class _ConexaoDoUso:
 def main(argv=None):
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    p = argparse.ArgumentParser(description="Servidor local do Lead Kit Silver.")
+    p = argparse.ArgumentParser(description=f"Servidor local do {produto.NOME}.")
     p.add_argument("--porta", type=int, default=PORTA_PADRAO)
     p.add_argument("--motor", default=motor_mod.URL_PADRAO)
     args = p.parse_args(argv)

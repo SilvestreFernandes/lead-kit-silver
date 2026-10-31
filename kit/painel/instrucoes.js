@@ -29,8 +29,8 @@ export const PASSOS_DOCKER_PARADO = [
 
 export const PASSOS_PERFIL_AUSENTE = [
   'Abra a sua IA (Claude Code, Codex ou a que você usou para instalar o kit). Se ela já estiver aberta, use a mesma janela.',
-  'Veja se ela está dentro da pasta do Lead Kit Silver. Se não estiver, peça: "abra a pasta do Lead Kit Silver".',
-  'Escreva para ela: "Faça a entrevista do meu perfil do Lead Kit Silver". Ela pergunta uma coisa de cada vez, e você responde com palavras simples.',
+  'Veja se ela está dentro da pasta do kit. Se não estiver, peça: "abra a pasta do kit de leads".',
+  'Escreva para ela: "Faça a entrevista do meu perfil do kit de leads". Ela pergunta uma coisa de cada vez, e você responde com palavras simples.',
   'Quando ela disser que terminou, volte aqui e clique em Verificar de novo.',
 ];
 
@@ -38,8 +38,8 @@ export const PASSOS_PERFIL_AUSENTE = [
 export function motivoDoMotor(diagnostico) {
   if (diagnostico && Array.isArray(diagnostico.passos)) return diagnostico;
   return {
-    titulo: 'O motor de busca está desligado',
-    texto: 'O motor de busca não está respondendo.',
+    titulo: 'O buscador está desligado',
+    texto: 'O buscador não está respondendo.',
     passos: PASSOS_LIGAR_MOTOR,
     comando: COMANDO_LIGAR_MOTOR,
   };

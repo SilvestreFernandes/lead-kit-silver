@@ -51,14 +51,13 @@ To support the engine's author, star the repository: https://github.com/gosom/go
 - **Data:** (c) OpenStreetMap contributors, available under the Open Database License (ODbL): https://www.openstreetmap.org/copyright
 - **Use in the kit:** only the city name, the state and the country are sent, to find the coordinates of the search area. Results are cached on disk, with at most one request per second and a User-Agent that identifies the kit, as the usage policy asks: https://operations.osmfoundation.org/policies/nominatim/
 
-## Fonts used in the design prototypes (docs/design)
+## Fonts
 
-These fonts are only in the static design prototypes in `docs/design/`, not in the panel. If a visual direction is chosen, the matching fonts move into `kit/painel/` and stay listed here. All files are served from the kit itself, never from a font service.
+The panel ships two fonts, served from the kit itself (`kit/painel/fontes/`), never from a font service:
 
-- **IBM Plex Sans** and **IBM Plex Mono**: Copyright 2017 and 2019 IBM Corp. SIL Open Font License 1.1. https://github.com/IBM/plex . License text: `docs/design/fontes/LICENCA-IBM-Plex.txt`
-- **Atkinson Hyperlegible Next**: Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors. SIL Open Font License 1.1. https://github.com/googlefonts/atkinson-hyperlegible-next . License text: `docs/design/fontes/LICENCA-Atkinson-Hyperlegible-Next.txt`
+- **IBM Plex Sans** and **IBM Plex Mono**: Copyright 2017 and 2019 IBM Corp. SIL Open Font License 1.1. https://github.com/IBM/plex . License text: `kit/painel/fontes/LICENCA-IBM-Plex.txt` (third-party text, kept exactly as published).
 
-The font files come from the `@fontsource` npm packages (latin subset, woff2), which republish the original fonts under the same license.
+The font files (woff2, latin subset, which covers Portuguese) come from the `@fontsource` npm packages, which republish the original fonts under the same license. The design prototype in `docs/design/` uses the same files.
 
 ## Development tools (not part of the product)
 

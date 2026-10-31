@@ -113,12 +113,12 @@ def executar_busca(conn, busca_id, perfil, motor, geo, progresso=None, dormir=ti
                 pedido = motor.montar_pedido(palavra, ponto["lat"], ponto["lon"], busca["tamanho"], email,
                                              raio=ponto["raio_m"])
                 pedidos.append(pedido)
-                avisar("Enviando a busca ao motor" + sufixo)
+                avisar("Enviando a busca" + sufixo)
                 job = motor.criar_job(pedido)
                 jobs.append(job)
                 banco.atualizar_busca(conn, busca_id, job_id=",".join(jobs),
                                       parametros={**busca["parametros"], "pedidos": pedidos})
-                motor.esperar(job, ao_esperar=lambda s, suf=sufixo: avisar("Esperando o motor" + suf, s))
+                motor.esperar(job, ao_esperar=lambda s, suf=sufixo: avisar("Esperando o buscador" + suf, s))
                 avisar("Lendo os resultados" + sufixo)
                 do_ponto, ignoradas_ponto = limpeza.ler_csv(motor.baixar_csv(job))
             except ERROS_ESPERADOS as e:
@@ -167,7 +167,7 @@ def executar(args, motor, geo, saida=print):
             saida(f"Erro: {e}")
         return 1
     if not motor.no_ar():
-        saida("O motor de busca não está ligado. Ligue com: docker compose up -d "
+        saida("O buscador não está ligado. Ligue com: docker compose up -d "
               "(espere uns 20 segundos e tente de novo).")
         return 1
 
@@ -178,7 +178,7 @@ def executar(args, motor, geo, saida=print):
         busca_id = iniciar_busca(conn, args.categoria, args.cidade, args.uf, args.tamanho, args.email)
 
         def progresso(etapa, segundos=None, ponto=None, pontos=None):
-            if etapa.startswith("Esperando o motor"):
+            if etapa.startswith("Esperando o buscador"):
                 saida(f"  {etapa.lower()}... {int(segundos)} s")
             elif etapa.startswith("Enviando a busca"):
                 saida(f"{etapa}. A primeira vez pode demorar. Não feche esta janela.")

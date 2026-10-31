@@ -8,7 +8,7 @@ import { ler, escrever, baixar, seguidor, ABANDONADA, ErroApi } from './api.js';
 import { el, limpar, blocoEstado, blocoCarregando, copiarTexto, avisar } from './dom.js';
 import {
   PAGINA_LEADS, STATUS_DO_LEAD, FILTROS_PADRAO, rotuloDoStatus, formatarNota, tipoDeSite, linkWhatsApp,
-  avisoDeConformidade, filtrosAtivos, situacaoDaLista, resumoDaLista, quantosFaltam, urlSegura, plural,
+  avisoDeConformidade, filtrosAtivos, situacaoDaLista, resumoDaLista, quantosFaltam, urlSegura, plural, textoDaAvaliacao,
 } from './util.js';
 
 const LETRAS = ['A', 'B', 'C'];
@@ -34,9 +34,17 @@ function letraSegura(letra) {
   return LETRAS.includes(letra) ? letra : 'C';
 }
 
-export function selo(lead) {
+// A nota: letra grande dentro de uma forma (A círculo, B quadrado, C losango), com cor e pontos ao lado.
+// Quem ficou fora da lista não ganha letra: aparece só como "Fora da lista", sem cor de nota.
+export function selo(lead, { grande = false } = {}) {
   if (lead.excluido_por) return el('span', { class: 'tag neutral', title: lead.excluido_por }, 'Fora da lista');
-  return el('span', { class: 'q ' + letraSegura(lead.letra), title: `Qualidade ${lead.letra}` }, letraSegura(lead.letra));
+  const letra = letraSegura(lead.letra);
+  const pontos = Number.isFinite(Number(lead.nota)) ? Number(lead.nota) : 0;
+  const nome = plural(pontos, 'ponto', 'pontos');
+  return el('span', { class: `nota ${letra}` + (grande ? ' grande' : ''), title: `Nota ${letra}, ${pontos} ${nome}` },
+    el('span', { class: 'so-leitor' }, `Nota ${letra}, `),
+    el('span', { class: 'forma', 'aria-hidden': 'true' }, el('b', {}, letra)),
+    el('span', { class: 'pts' }, el('b', { class: 'num' }, String(pontos)), nome));
 }
 
 export function textoDoPorQue(lead) {
@@ -53,15 +61,14 @@ export function criarLinha(lead, aoAbrir) {
       if (evento.key === 'Enter' || evento.key === ' ') { evento.preventDefault(); abrir(); }
     },
   },
-  el('td', { class: 'name' }, el('b', {}, lead.nome),
-    el('small', {}, [lead.categoria, lead.telefone].filter(Boolean).join(' · '),
-      el('span', { class: 'so-celular' }, ` · Nota ${formatarNota(lead.nota_maps)} (${lead.avaliacoes ?? 0})`))),
-  el('td', { class: 'num col-nota' }, `${formatarNota(lead.nota_maps)} (${lead.avaliacoes ?? 0})`),
-  el('td', { class: 'col-site' }, etiquetaDoSite(lead.site)),
-  el('td', { class: 'col-zap' }, etiquetaDoTelefone(lead)),
-  el('td', {}, selo(lead)),
-  el('td', { class: 'porque col-porque', title: (lead.motivos || []).join('; ') }, textoDoPorQue(lead)),
-  el('td', { class: 'status-cel', dataset: { status: lead.status } }, rotuloDoStatus(lead.status)));
+  el('td', { class: 'c-nota' }, selo(lead)),
+  el('td', { class: 'name c-nome' }, el('b', {}, lead.nome),
+    el('small', {}, lead.categoria || ''),
+    lead.telefone ? el('small', { class: 'tel' }, lead.telefone) : null),
+  el('td', { class: 'porque c-porque', title: (lead.motivos || []).join('; ') }, textoDoPorQue(lead)),
+  el('td', { class: 'c-contato' }, el('div', { class: 'contato-tags' }, etiquetaDoSite(lead.site), etiquetaDoTelefone(lead))),
+  el('td', { class: 'aval c-aval', dataset: { rotulo: 'Avaliação no Google' } }, textoDaAvaliacao(lead.nota_maps, lead.avaliacoes)),
+  el('td', { class: 'status-cel c-status', dataset: { status: lead.status, rotulo: 'Status' } }, rotuloDoStatus(lead.status)));
   return linha;
 }
 
@@ -73,12 +80,15 @@ export function blocoPorQue(detalhe) {
   }
   const itens = detalhe.por_que || [];
   if (!itens.length) {
-    return el('div', { class: 'sect' }, el('h3', {}, 'Por que essa nota'),
-      el('ul', { class: 'why vazio' }, el('li', {}, 'Nenhuma regra do seu perfil bateu com este negócio.')));
+    return el('div', { class: 'sect' }, el('h3', {}, 'Como a nota foi calculada'),
+      el('ul', { class: 'why vazio' }, el('li', {}, el('span', {}, 'Nenhuma regra do seu perfil bateu com este negócio.'))));
   }
-  return el('div', { class: 'sect' }, el('h3', {}, 'Por que essa nota'),
-    el('ul', { class: 'why' }, itens.map((i) =>
-      el('li', {}, el('span', {}, i.texto, el('small', {}, `+${i.pontos} ${plural(i.pontos, 'ponto', 'pontos')}`))))));
+  const pontos = (n) => el('span', { class: 'pts-lista' }, el('b', {}, String(n)), ` ${plural(n, 'ponto', 'pontos')}`);
+  const letra = LETRAS.includes(detalhe.letra) ? detalhe.letra : 'C';
+  return el('div', { class: 'sect' }, el('h3', {}, 'Como a nota foi calculada'),
+    el('ul', { class: 'why' },
+      itens.map((i) => el('li', {}, el('span', {}, i.texto), el('span', { class: 'pts-lista' }, el('b', {}, `+${i.pontos}`), ` ${plural(i.pontos, 'ponto', 'pontos')}`))),
+      el('li', { class: 'total' }, el('span', {}, `Total: nota ${letra}`), pontos(detalhe.nota ?? 0))));
 }
 
 function linhaDeContato(rotulo, ...conteudo) {
@@ -216,9 +226,9 @@ function criarGaveta({ perfil, aoMudarStatus }) {
     const cabecalho = el('div', { class: 'dr-head' },
       el('div', {}, el('h2', {}, d.nome), el('p', {}, [d.categoria, d.endereco].filter(Boolean).join(' · '))),
       el('button', { class: 'x', type: 'button', 'aria-label': 'Fechar', onClick: fechar }, '×'));
-    const etiquetas = el('div', { class: 'dr-tags' }, selo(d), etiquetaDoSite(d.site), etiquetaDoTelefone(d),
-      el('span', { class: 'tag neutral' }, `Nota ${formatarNota(d.nota_maps)} (${d.avaliacoes ?? 0})`),
-      el('span', { class: 'tag neutral' }, `${d.nota} ${plural(d.nota, 'ponto', 'pontos')}`));
+    const etiquetas = el('div', { class: 'dr-nota' }, selo(d, { grande: true }),
+      el('div', { class: 'dr-tags' }, etiquetaDoSite(d.site), etiquetaDoTelefone(d),
+        el('span', { class: 'tag neutral' }, 'Avaliação no Google: ' + textoDaAvaliacao(d.nota_maps, d.avaliacoes))));
 
     // ---- mensagem
     const area = el('textarea', { class: 'msg', id: 'gaveta-mensagem', 'aria-label': 'Mensagem para enviar', spellcheck: 'true' });
@@ -321,7 +331,7 @@ function criarGaveta({ perfil, aoMudarStatus }) {
     });
 
     const indicadorNota = el('div', { class: 'salvo', role: 'status' });
-    const areaNota = el('textarea', { class: 'nota', id: 'gaveta-anotacao', 'aria-label': 'Anotação sobre o lead', maxlength: '2000' });
+    const areaNota = el('textarea', { class: 'nota-anotacao', id: 'gaveta-anotacao', 'aria-label': 'Anotação sobre o lead', maxlength: '2000' });
     areaNota.value = d.anotacao || '';
     let temporizadorNota = null;
     const enviarNota = async () => {
@@ -461,7 +471,7 @@ export function montarLeads(raiz, ctx) {
 
   function desenharPilulas() {
     const todos = estado.contagem.A + estado.contagem.B + estado.contagem.C;
-    const itens = [['', 'Todos', todos], ...LETRAS.map((l) => [l, l, estado.contagem[l]])];
+    const itens = [['', 'Todos', todos], ...LETRAS.map((l) => [l, `Nota ${l}`, estado.contagem[l]])];
     const rapido = (chave, rotulo, dica) => el('button', {
       class: 'pill', type: 'button', title: dica, 'aria-pressed': String(estado.filtros[chave] === '1'), onClick: () => {
         estado.filtros[chave] = estado.filtros[chave] === '1' ? '' : '1';
@@ -550,8 +560,8 @@ export function montarLeads(raiz, ctx) {
     area.append(el('div', { class: 'card' },
       el('div', { class: 'tablewrap' }, el('table', {},
         el('thead', {}, el('tr', {},
-          el('th', {}, 'Negócio'), el('th', { class: 'col-nota' }, 'Nota no Google'), el('th', { class: 'col-site' }, 'Site'),
-          el('th', { class: 'col-zap' }, 'Telefone'), el('th', {}, 'Qualidade'), el('th', { class: 'col-porque' }, 'Por quê'), el('th', {}, 'Status'))),
+          el('th', {}, 'Nota'), el('th', {}, 'Negócio'), el('th', {}, 'Por quê'), el('th', {}, 'Site e telefone'),
+          el('th', {}, 'Avaliação no Google'), el('th', {}, 'Status'))),
         corpo)),
       el('div', { class: 'rodape-lista' }, el('span', { role: 'status' }, resumoDaLista(estado.leads.length, estado.total)), faltam ? maisBotao : null)));
   }

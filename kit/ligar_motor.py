@@ -16,13 +16,13 @@ LIMITE_DO_COMANDO_S = 600  # a primeira vez pode baixar a imagem do motor
 NOME_DO_LOG = "log-motor.txt"
 
 MENSAGENS = {
-    "ligando": "Ligando o motor. Pode levar alguns minutos, principalmente na primeira vez, "
-               "porque o Docker pode precisar baixar o motor.",
-    "ok": "O comando terminou. Espere o motor responder e clique em Verificar de novo se a tela não mudar.",
+    "ligando": "Ligando o buscador. Pode levar alguns minutos, principalmente na primeira vez, "
+               "porque o Docker pode precisar baixar o buscador.",
+    "ok": "O comando terminou. Espere o buscador responder e clique em Verificar de novo se a tela não mudar.",
     "docker_ausente": "Não encontrei o Docker neste computador.",
     "demorou": "O Docker demorou mais de 10 minutos e o kit parou de esperar. Abra o Docker Desktop, "
                "veja se ele está verde e tente de novo.",
-    "erro": "O Docker não conseguiu ligar o motor. Os detalhes ficaram salvos no arquivo dados/log-motor.txt, "
+    "erro": "O Docker não conseguiu ligar o buscador. Os detalhes ficaram salvos no arquivo dados/log-motor.txt, "
             "dentro da pasta do kit. Mostre esse arquivo para a sua IA pedir ajuda.",
 }
 

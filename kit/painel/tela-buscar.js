@@ -22,7 +22,7 @@ export const TEXTO_PRIVACIDADE = {
   titulo: 'O que sai do seu computador',
   itens: [
     'O nome da cidade e o estado vão para o serviço de localização OpenStreetMap (Nominatim), que devolve as coordenadas. Esse serviço enxerga o seu endereço de internet, como qualquer site que você visita.',
-    'O motor de busca roda no seu computador e consulta o Google Maps pela sua conexão, com o tipo de negócio, a cidade e essas coordenadas.',
+    'O buscador roda no seu computador e consulta o Google Maps pela sua conexão, com o tipo de negócio, a cidade e essas coordenadas.',
     'Os leads, as notas, o seu perfil e as mensagens ficam só no seu computador.',
   ],
 };
@@ -311,7 +311,7 @@ export function montarBuscar(raiz, ctx) {
     ref.botao.disabled = estado.enviando || !motorNoAr();
     ref.botao.textContent = estado.enviando ? 'Enviando...' : 'Buscar leads';
     ref.nota.textContent = !motorNoAr()
-      ? 'Ligue o motor de busca para poder buscar. O aviso acima mostra como.'
+      ? 'Ligue o buscador para poder buscar. O aviso acima mostra como.'
       : (tamanho ? `Estimativa: ${tamanho.tempo_estimado}. Pode variar.` : '');
   }
 

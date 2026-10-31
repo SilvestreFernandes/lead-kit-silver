@@ -8,7 +8,7 @@ import io
 import re
 from urllib.parse import quote
 
-from kit import banco, modelos, pontuacao, xlsx
+from kit import banco, modelos, pontuacao, produto, xlsx
 from kit.limpeza import normalizar_nome
 
 FILTROS_EXCLUIDOS = ("nao", "sim", "todos")
@@ -280,4 +280,4 @@ def exportar_xlsx(avaliados, perfil):
             l["endereco"], l["nota_maps"], l["avaliacoes"], l["status"], l["anotacao"], mensagem,
         ]
         linhas.append(linha)
-    return xlsx.gerar(colunas, linhas, nome_aba="Leads", titulo_documento="Lead Kit Silver: leads")
+    return xlsx.gerar(colunas, linhas, nome_aba="Leads", titulo_documento=f"{produto.NOME}: leads")

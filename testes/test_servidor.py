@@ -720,10 +720,10 @@ class TestBuscas(Base):
         bid = self.criar().json["id"]
         fim = time.time() + 5
         d = self.ler(f"/api/buscas/{bid}").json
-        while d["etapa"] != "Esperando o motor" and time.time() < fim:
+        while d["etapa"] != "Esperando o buscador" and time.time() < fim:
             time.sleep(0.02)
             d = self.ler(f"/api/buscas/{bid}").json
-        self.assertEqual((d["status"], d["etapa"]), ("working", "Esperando o motor"))
+        self.assertEqual((d["status"], d["etapa"]), ("working", "Esperando o buscador"))
         self.assertEqual(self.ler("/api/estado").json["busca_em_andamento"], bid)
         self.motor.segurar.set()
         final = self.esperar_busca(bid)
@@ -1308,7 +1308,7 @@ class TestEtapa4NoServidor(Base):
         bid = self.criar(tamanho="media").json["id"]
         d = self.ler(f"/api/buscas/{bid}").json
         fim = time.time() + 5
-        while d["etapa"] != "Esperando o motor (ponto 1 de 5)" and time.time() < fim:
+        while d["etapa"] != "Esperando o buscador (ponto 1 de 5)" and time.time() < fim:
             time.sleep(0.02)
             d = self.ler(f"/api/buscas/{bid}").json
         self.assertEqual((d["status"], d["ponto"], d["pontos"]), ("working", 1, 5))

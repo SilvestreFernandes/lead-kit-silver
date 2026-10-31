@@ -23,7 +23,7 @@ DIAGNOSTICOS = {
     "no_ar": None,
     "docker_ausente": {
         "titulo": "O Docker não foi encontrado",
-        "texto": "O kit usa o Docker Desktop para rodar o motor de busca, e ele não está instalado neste computador.",
+        "texto": "O kit usa o Docker Desktop para rodar o buscador, e ele não está instalado neste computador.",
         "passos": [
             "Peça para a sua IA conferir a instalação do Docker Desktop. Ela explica o que falta e pede a sua confirmação antes de instalar qualquer coisa.",
             "Se preferir instalar sozinho, procure Docker Desktop no site docker.com, baixe e instale. Depois abra o Docker Desktop pelo menu Iniciar (ícone da baleia) e espere ele ficar verde.",
@@ -32,7 +32,7 @@ DIAGNOSTICOS = {
     },
     "docker_parado": {
         "titulo": "O Docker está desligado",
-        "texto": "O motor de busca roda dentro do Docker, e o Docker Desktop está fechado.",
+        "texto": "O buscador roda dentro do Docker, e o Docker Desktop está fechado.",
         "passos": [
             "Abra o Docker Desktop pelo menu Iniciar (procure o ícone da baleia).",
             "Espere ele ficar verde. Pode levar um ou dois minutos.",
@@ -42,8 +42,8 @@ DIAGNOSTICOS = {
         "comando": COMANDO_LIGAR_MOTOR,
     },
     "motor_parado": {
-        "titulo": "O motor de busca está desligado",
-        "texto": "O Docker está ligado, mas o motor de busca não.",
+        "titulo": "O buscador está desligado",
+        "texto": "O Docker está ligado, mas o buscador não.",
         "passos": [
             *PASSOS_TERMINAL,
             "Espere uns 20 segundos e clique em Verificar de novo.",

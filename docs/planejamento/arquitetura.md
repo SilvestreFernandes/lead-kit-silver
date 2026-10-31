@@ -237,6 +237,15 @@ O painel é uma página estática (`index.html`, `estilo.css` e alguns arquivos 
 | Leads | Tabela com nota A, B, C, filtros (nota, status, texto, lista ou excluídos, busca), carregamento por partes de 100 e exportação. Ao abrir um lead (gaveta): "Por quê" em frases simples com os pontos, mensagem pronta e editável, copiar, abrir o WhatsApp, status e anotação. Fica sempre visível o aviso de conformidade quando a área é regulada ou a pessoa não sabe | `GET /api/leads`, `GET` e `PATCH /api/leads/{id}`, `GET /api/exportar` (CSV e .xlsx, com token), `GET /api/perfil`, `GET /api/buscas` |
 | Minha oferta | Edita o perfil, com as mesmas respostas das 12 perguntas: o que vende, nome e empresa, tipos de negócio, regiões, porte, atendimento, melhor cliente, regras de nota com peso de 0 a 5, cortes A e B (automáticos ou manuais), o que evitar (com listas de concorrentes e categorias), canais, tom, oferta de entrada, volume por semana, mensagens por canal e a resposta sobre regras da área. Salvar grava o perfil e dá nota de novo aos leads | `GET /api/opcoes`, `GET` e `PUT /api/perfil`, `POST /api/leads/reavaliar` |
 
+Visual do painel (direção A, "Instrumento", etapa 1 do redesign):
+
+- **Prata e grafite**, claro e escuro. **Menu lateral** no computador e **barra no topo** no celular (sem rolagem lateral). Sem selo nem sigla: só o nome em texto, que vem de `kit/produto.py` (o nome do produto ainda é decisão em aberto) e é trocado no `index.html` pelo servidor.
+- **Fontes só do kit:** IBM Plex Sans e IBM Plex Mono em woff2, em `kit/painel/fontes/`, com a licença OFL sem alteração. Nenhum pedido a serviço de fonte.
+- **Leitura fácil para leigos:** corpo em 16 px, nada abaixo de 13 px, alvos de clique de 44 px, fonte de números só em números e comandos (nunca em rótulos nem em maiúsculas). Um teste confere cada uma dessas regras no CSS.
+- **A nota** é uma letra grande dentro de uma forma: A círculo verde, B quadrado âmbar e C losango azul-acinzentado (C é prioridade menor, não "lead ruim", então não usa vermelho), com os pontos ao lado. Quem está fora da lista não ganha letra nem cor. A tabela e a gaveta usam só o termo "Nota", e a nota do Google aparece como "Avaliação no Google: 4,8 (312 avaliações)".
+- **Nas telas, "motor" vira "buscador"** (Buscador ligado, Ligar o buscador). Código, testes e documentação técnica continuam com "motor".
+- **Menu pelo teclado:** setas para cima e para baixo (e esquerda e direita) trocam de aba.
+
 Regras da tela Buscar (fase 3):
 
 - **Uma busca por vez, mostrada com clareza.** Se já existe uma busca (iniciada por esta página, por outra aba ou antes de recarregar), a tela mostra só ela: título, tamanho, tempo decorrido, ponto atual, etapa e a barra, tudo lido do servidor a cada 2 s. Busca de um ponto só tem barra sem fim definido, em vez de um número inventado.

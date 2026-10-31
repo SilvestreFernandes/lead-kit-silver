@@ -163,7 +163,7 @@ def montar(estado, porta, atraso=3.0):
             semear_busca(conn, "restaurantes", "Brasília", "DF", "media", status="erro", total=36, novos=30,
                          ja_existiam=6, fora_da_lista=3,
                          erro="A busca parou no ponto 3 de 5. Os 36 negócios dos pontos anteriores foram salvos. "
-                              "Motivo: O motor não está respondendo.",
+                              "Motivo: O buscador não está respondendo.",
                          erro_tipo="parcial", minutos_atras=4, duracao_s=170)
         conn.commit()
         conn.close()
@@ -204,7 +204,7 @@ def montar(estado, porta, atraso=3.0):
 
     motor.baixar_csv = baixar
     if estado == "erro_no_meio":
-        motor.falha_a_partir_do_job = (3, motor_mod.ErroMotor("O motor não está respondendo."))
+        motor.falha_a_partir_do_job = (3, motor_mod.ErroMotor("O buscador não está respondendo."))
 
     if estado == "buscando":  # uma busca media ja rodando quando a demonstracao abre
         perfil_ok, _, _ = validar_perfil.carregar(dados / "perfil.json")

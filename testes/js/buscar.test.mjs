@@ -74,16 +74,16 @@ test('formatarDuracao, duracaoDaBusca e quandoFoi', () => {
 
 test('etapas e porcentagem: só mostra número quando dá para saber', () => {
   assert.equal(util.indiceDaEtapa('Achando a cidade no mapa'), 0);
-  assert.equal(util.indiceDaEtapa('Enviando a busca ao motor (ponto 2 de 5)'), 1);
-  assert.equal(util.indiceDaEtapa('Esperando o motor (ponto 2 de 5)'), 2);
+  assert.equal(util.indiceDaEtapa('Enviando a busca (ponto 2 de 5)'), 1);
+  assert.equal(util.indiceDaEtapa('Esperando o buscador (ponto 2 de 5)'), 2);
   assert.equal(util.indiceDaEtapa('Pausa entre os pontos (ponto 3 de 5)'), 2);
   assert.equal(util.indiceDaEtapa('Lendo os resultados'), 3);
   assert.equal(util.indiceDaEtapa('Calculando as notas'), 4);
   assert.equal(util.indiceDaEtapa(null), -1);
-  assert.equal(util.percentualDaBusca({ pontos: 5, ponto: 1, etapa: 'Esperando o motor' }), 0);
-  assert.equal(util.percentualDaBusca({ pontos: 5, ponto: 3, etapa: 'Esperando o motor' }), 40);
+  assert.equal(util.percentualDaBusca({ pontos: 5, ponto: 1, etapa: 'Esperando o buscador' }), 0);
+  assert.equal(util.percentualDaBusca({ pontos: 5, ponto: 3, etapa: 'Esperando o buscador' }), 40);
   assert.equal(util.percentualDaBusca({ pontos: 5, ponto: 5, etapa: 'Calculando as notas' }), 100);
-  assert.equal(util.percentualDaBusca({ pontos: 1, ponto: 1, etapa: 'Esperando o motor' }), null);  // uma busca só: sem número inventado
+  assert.equal(util.percentualDaBusca({ pontos: 1, ponto: 1, etapa: 'Esperando o buscador' }), null);  // uma busca só: sem número inventado
   assert.equal(util.percentualDaBusca(null), null);
 });
 
@@ -209,7 +209,7 @@ test('sem cancelar: o texto diz que não dá, sem prometer nada além', () => {
 // ---------- peças de desenho
 
 test('progresso: atualiza no lugar, mostra o ponto e não tem botão de cancelar', () => {
-  const p = buscar.criarProgresso(busca({ status: 'working', etapa: 'Esperando o motor (ponto 2 de 5)', segundos: 75, ponto: 2 }));
+  const p = buscar.criarProgresso(busca({ status: 'working', etapa: 'Esperando o buscador (ponto 2 de 5)', segundos: 75, ponto: 2 }));
   const no = p.no;
   assert.equal(botoes(no).length, 0);  // nenhum botão: não existe cancelar
   assert.ok(textoTodo(no).includes('Buscando padaria em Sobradinho-DF'));
@@ -221,7 +221,7 @@ test('progresso: atualiza no lugar, mostra o ponto e não tem botão de cancelar
   assert.equal(barra.attributes['aria-valuenow'], '20');
   assert.ok(!barra.className.includes('indeterminada'));
   const filhosAntes = no.children.length;
-  p.atualizar(busca({ status: 'working', etapa: 'Esperando o motor (ponto 4 de 5)', segundos: 200, ponto: 4 }));
+  p.atualizar(busca({ status: 'working', etapa: 'Esperando o buscador (ponto 4 de 5)', segundos: 200, ponto: 4 }));
   assert.equal(no.children.length, filhosAntes);  // mesmo cartão, atualizado no lugar
   assert.equal(barra.attributes['aria-valuenow'], '60');
   assert.ok(textoTodo(no).includes('3 min 20 s'));
@@ -231,7 +231,7 @@ test('progresso: atualiza no lugar, mostra o ponto e não tem botão de cancelar
 });
 
 test('progresso de busca rápida: barra sem fim definido, sem número inventado', () => {
-  const p = buscar.criarProgresso(busca({ tamanho: 'rapida', pontos: 1, ponto: 1, status: 'working', etapa: 'Esperando o motor', segundos: 20 }));
+  const p = buscar.criarProgresso(busca({ tamanho: 'rapida', pontos: 1, ponto: 1, status: 'working', etapa: 'Esperando o buscador', segundos: 20 }));
   const barra = elementos(p.no).find((n) => n.attributes.role === 'progressbar');
   assert.ok(barra.className.includes('indeterminada'));
   assert.equal(barra.attributes['aria-valuenow'], undefined);
@@ -240,10 +240,10 @@ test('progresso de busca rápida: barra sem fim definido, sem número inventado'
 });
 
 test('progresso: quando o kit não responde, avisa sem desistir', () => {
-  const p = buscar.criarProgresso(busca({ status: 'working', etapa: 'Esperando o motor', ponto: 1 }));
+  const p = buscar.criarProgresso(busca({ status: 'working', etapa: 'Esperando o buscador', ponto: 1 }));
   const aviso = elementos(p.no).find((n) => n.attributes.role === 'alert');
   assert.equal(aviso.hidden, true);
-  p.atualizar(busca({ status: 'working', etapa: 'Esperando o motor', ponto: 1 }), { semResposta: true });
+  p.atualizar(busca({ status: 'working', etapa: 'Esperando o buscador', ponto: 1 }), { semResposta: true });
   assert.equal(aviso.hidden, false);
   assert.match(aviso.textContent, /Continuo tentando/);
 });
@@ -337,6 +337,6 @@ test('motor desligado: cada motivo mostra o que fazer, com onde e como', () => {
   assert.ok(!textoTodo(ausente).includes('docker compose'));
   assert.ok(textoTodo(ausente).includes('Peça para a sua IA conferir'));
   const sem = buscar.criarBlocoDoMotor(null, () => {});  // diagnóstico ainda desconhecido: mensagem geral, com passos
-  assert.ok(textoTodo(sem).includes('O motor de busca está desligado'));
+  assert.ok(textoTodo(sem).includes('O buscador está desligado'));
   assert.ok(textoTodo(sem).includes('digite powershell e aperte Enter'));
 });

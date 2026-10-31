@@ -18,7 +18,7 @@ class TestTestarApi(Base):
     def test_estado(self):
         codigo, texto = self.rodar("estado")
         self.assertEqual(codigo, 0)
-        self.assertIn("Motor de busca: ligado", texto)
+        self.assertIn("Buscador: ligado", texto)
         self.assertIn("Perfil: válido", texto)
 
     def test_buscar_do_comeco_ao_fim_e_depois_consultar(self):

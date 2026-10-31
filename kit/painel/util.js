@@ -32,8 +32,9 @@ export function hashDaAba(aba) {
 export function abaVizinha(atual, tecla, abas) {
   const lista = abas && abas.length ? abas : ABAS;
   const i = Math.max(0, lista.indexOf(atual));
-  if (tecla === 'ArrowRight') return lista[(i + 1) % lista.length];
-  if (tecla === 'ArrowLeft') return lista[(i - 1 + lista.length) % lista.length];
+  // O menu é vertical no computador e horizontal no celular: as quatro setas funcionam nos dois.
+  if (tecla === 'ArrowRight' || tecla === 'ArrowDown') return lista[(i + 1) % lista.length];
+  if (tecla === 'ArrowLeft' || tecla === 'ArrowUp') return lista[(i - 1 + lista.length) % lista.length];
   if (tecla === 'Home') return lista[0];
   if (tecla === 'End') return lista[lista.length - 1];
   return null;
@@ -108,6 +109,13 @@ export function rotuloDoStatus(status) {
 export function formatarNota(nota) {
   if (nota === null || nota === undefined || Number.isNaN(Number(nota))) return '-';
   return String(Number(nota)).replace('.', ',');
+}
+
+// "4,8 (312 avaliações)": a nota que o Google Maps mostra e quantas avaliações a sustentam.
+export function textoDaAvaliacao(nota, avaliacoes) {
+  if (nota === null || nota === undefined || Number.isNaN(Number(nota))) return 'Sem avaliação';
+  const n = Number.isFinite(Number(avaliacoes)) ? Number(avaliacoes) : 0;
+  return `${formatarNota(nota)} (${n} ${plural(n, 'avaliação', 'avaliações')})`;
 }
 
 // 'nenhum' (sem site), 'rede' (o "site" é só Instagram ou Facebook) ou 'tem'.
@@ -295,7 +303,7 @@ export function descreverBusca(busca) {
 }
 
 export const ETAPAS_DA_BUSCA = [
-  'Achando a cidade no mapa', 'Enviando a busca ao motor', 'Esperando o motor', 'Lendo os resultados', 'Calculando as notas',
+  'Achando a cidade no mapa', 'Enviando a busca', 'Esperando o buscador', 'Lendo os resultados', 'Calculando as notas',
 ];
 
 // Em qual das ETAPAS_DA_BUSCA a busca está (-1 se ainda não se sabe).
@@ -330,10 +338,10 @@ const ERROS_DA_BUSCA = {
     'Confira o nome da cidade e o estado. Use o nome como aparece no mapa, por exemplo "Brasília" e "DF".'],
   servico_de_mapas: ['Não consegui falar com o serviço de localização',
     'O kit usa esse serviço só para achar a cidade no mapa. Confira a sua conexão com a internet e tente de novo.'],
-  motor: ['O motor de busca não respondeu',
-    'Confira se o Docker e o motor estão ligados (o aviso no topo mostra o que fazer) e tente de novo.'],
-  formato: ['O motor devolveu o resultado num formato que o kit não conhece',
-    'O motor pode ter sido atualizado ou o Google pode ter mudado. Se o erro se repetir, o kit precisa de uma atualização. Nada seu foi perdido.'],
+  motor: ['O buscador não respondeu',
+    'Confira se o Docker e o buscador estão ligados (o aviso no topo mostra o que fazer) e tente de novo.'],
+  formato: ['O buscador devolveu o resultado num formato que o kit não conhece',
+    'O buscador pode ter sido atualizado ou o Google pode ter mudado. Se o erro se repetir, o kit precisa de uma atualização. Nada seu foi perdido.'],
   parcial: ['A busca parou no meio',
     'O que já tinha chegado foi salvo e está em Leads. Você pode ver esses leads agora e refazer a busca mais tarde.'],
   interrompida: ['A busca foi interrompida',

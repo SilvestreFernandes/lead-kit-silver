@@ -60,12 +60,12 @@ test('o clique faz um POST sem corpo útil, com token, e depois acompanha o esta
 });
 
 test('recusa do servidor vira aviso simples, sem quebrar', async () => {
-  simularRede(409, '{"erro":"O motor já está ligado."}');
+  simularRede(409, '{"erro":"O buscador já está ligado."}');
   const avisos = [];
   const estado = estadoDoKit();
   const no = ligar.criarLigarMotor({ estado, atualizarEstado: async () => estado, avisar: (t) => avisos.push(t) });
   await botoes(no)[0].ouvintes.click[0]();
-  assert.deepEqual(avisos, ['O motor já está ligado.']);
+  assert.deepEqual(avisos, ['O buscador já está ligado.']);
 });
 
 test('chave do motor: igual quando nada mudou, diferente quando algo mudou', () => {
@@ -78,10 +78,10 @@ test('tela Buscar: com o botão, o passo a passo manual fica recolhido; sem ele,
   const estado = estadoDoKit();
   const botao = ligar.criarLigarMotor({ estado, atualizarEstado: async () => estado, avisar: () => {} });
   const com = buscar.criarBlocoDoMotor(estado.motor_diagnostico, () => {}, botao);
-  assert.match(textoTodo(com), /Ligar o motor/);
+  assert.match(textoTodo(com), /Ligar o buscador/);
   assert.match(textoTodo(com), /Prefere ligar sozinho/);
   const sem = buscar.criarBlocoDoMotor(diag('docker_parado'), () => {}, null);
-  assert.ok(!/Ligar o motor/.test(textoTodo(sem)));
+  assert.ok(!/Ligar o buscador/.test(textoTodo(sem)));
   assert.ok(!/Prefere ligar sozinho/.test(textoTodo(sem)));
   assert.match(textoTodo(sem), /Passo um/);
 });

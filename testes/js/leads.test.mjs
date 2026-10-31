@@ -7,6 +7,7 @@ import { percorrer, elementos, tags, textos } from './dom_falso.mjs';
 
 const { el } = await import('../../kit/painel/dom.js');
 const leads = await import('../../kit/painel/tela-leads.js');
+const leadsUtil = await import('../../kit/painel/util.js');
 
 
 const MALICIOSO = '<img src=x onerror=alert(1)>';
@@ -45,17 +46,20 @@ test('el(): href e src nunca apontam para código', () => {
 
 test('linha da tabela: nome malicioso aparece como texto, sem criar elemento nenhum', () => {
   const linha = leads.criarLinha(leadMalicioso(), () => {});
-  const nomeCelula = linha.children[0];
+  const nomeCelula = linha.children[1];
   assert.equal(nomeCelula.children[0].tagName, 'B');          // o <b> é do painel, não do nome
   assert.equal(nomeCelula.children[0].textContent, MALICIOSO);  // o nome inteiro, como texto
   for (const tag of PERIGOSAS.filter((t) => t !== 'B')) assert.ok(!tags(linha).includes(tag), tag);
-  assert.deepEqual(tags(linha).filter((t) => t === 'B'), ['B']);  // um só <b>: o do painel
+  // os <b> são do painel (letra da nota, pontos e nome) e só guardam texto
+  for (const b of elementos(linha).filter((n) => n.tagName === 'B')) assert.ok(b.children.every((c) => c.nodeType === 3));
+  assert.equal(elementos(linha).filter((n) => n.tagName === 'B' && n.textContent === MALICIOSO).length, 1);
 });
 
 test('linha da tabela: categoria, telefone e motivos também só viram texto', () => {
   const linha = leads.criarLinha(leadMalicioso(), () => {});
   const todos = textos(linha).join('|');
-  assert.ok(todos.includes('<b>Padaria</b> · <svg onload=alert(1)>'));
+  assert.ok(todos.includes('<b>Padaria</b>'));
+  assert.ok(todos.includes('<svg onload=alert(1)>'));
   assert.ok(todos.includes('<script>alert(3)</script>'));
   for (const no of elementos(linha)) {
     assert.ok(!Object.keys(no.attributes).some((a) => a.toLowerCase().startsWith('on')), 'atributo de evento em ' + no.tagName);
@@ -66,7 +70,7 @@ test('linha da tabela: categoria, telefone e motivos também só viram texto', (
 
 test('linha da tabela: o texto malicioso no title é só valor de atributo', () => {
   const linha = leads.criarLinha(leadMalicioso(), () => {});
-  const porque = linha.children[5];
+  const porque = linha.children[2];
   assert.equal(porque.attributes.title, '<img src=y onerror=alert(2)> (+3)');
   assert.equal(porque.children.length, 1);
   assert.equal(porque.children[0].nodeType, 3);
@@ -81,8 +85,8 @@ test('linha da tabela: lead excluído mostra o motivo como texto e fica marcado'
 
 test('linha da tabela: letra de qualidade desconhecida cai em C (classe nunca vem do dado)', () => {
   const linha = leads.criarLinha(leadMalicioso({ letra: 'A" onmouseover="alert(1)' }), () => {});
-  const q = elementos(linha).find((n) => /\bq\b/.test(n.className));
-  assert.equal(q.className, 'q C');
+  const nota = elementos(linha).find((n) => /(^|\s)nota(\s|$)/.test(n.className));
+  assert.equal(nota.className, 'nota C');
 });
 
 test('linha da tabela: clicar e Enter abrem o lead certo, Espaço também', () => {
@@ -125,8 +129,48 @@ test('por que: frases do servidor entram como texto, com os pontos', () => {
   const bloco = leads.blocoPorQue({ excluido_por: null, por_que: [{ texto: MALICIOSO, rotulo: 'x', pontos: 3 }, { texto: 'Ok.', rotulo: 'y', pontos: 1 }] });
   assert.ok(!tags(bloco).includes('IMG'));
   assert.ok(textos(bloco).includes(MALICIOSO));
-  assert.ok(textos(bloco).includes('+3 pontos'));
-  assert.ok(textos(bloco).includes('+1 ponto'));
+  assert.ok(textos(bloco).includes('+3'));
+  assert.ok(textos(bloco).includes(' pontos'));
+  assert.ok(textos(bloco).includes('+1'));
+  assert.ok(textos(bloco).includes(' ponto'));
+});
+
+test('por que: a lista termina com o total e a nota, no mesmo vocabulário da tabela', () => {
+  const bloco = leads.blocoPorQue({ excluido_por: null, letra: 'B', nota: 4, por_que: [{ texto: 'Ok.', rotulo: 'y', pontos: 3 }, { texto: 'Outro.', rotulo: 'z', pontos: 1 }] });
+  const todo = textos(bloco).join(' | ');
+  assert.ok(todo.includes('Como a nota foi calculada'));
+  assert.ok(todo.includes('Total: nota B'));
+  assert.ok(textos(bloco).includes('4'));
+  assert.ok(!/Qualidade/i.test(todo));
+});
+
+test('nota: A é círculo, B é quadrado e C é losango, cada uma com letra, cor própria e pontos', () => {
+  const faz = (letra, nota) => leads.selo({ letra, nota, excluido_por: null });
+  for (const [letra, nota, pontos] of [['A', 8, '8'], ['B', 5, '5'], ['C', 1, '1']]) {
+    const no = faz(letra, nota);
+    assert.equal(no.className, `nota ${letra}`);
+    assert.ok(elementos(no).some((n) => n.className === 'forma' && n.attributes['aria-hidden'] === 'true' && n.textContent === letra));
+    assert.ok(textos(no).includes(pontos));
+    assert.ok(textos(no).includes(`Nota ${letra}, `));  // leitor de tela lê a nota, a forma é só visual
+  }
+  assert.ok(textos(faz('C', 1)).includes('ponto'));
+  assert.ok(textos(faz('A', 8)).includes('pontos'));
+  assert.equal(faz('B', 5).attributes.title, 'Nota B, 5 pontos');
+  assert.equal(leads.selo({ letra: 'A', nota: 8, excluido_por: null }, { grande: true }).className, 'nota A grande');
+});
+
+test('nota: quem ficou fora da lista não ganha letra nem cor de nota', () => {
+  const no = leads.selo({ letra: 'A', nota: 8, excluido_por: 'sem telefone' });
+  assert.equal(no.textContent, 'Fora da lista');
+  assert.ok(!/(^|\s)nota(\s|$)/.test(no.className));
+});
+
+test('avaliação do Google: "4,8 (312 avaliações)", singular e sem avaliação', () => {
+  assert.equal(leadsUtil.textoDaAvaliacao(4.8, 312), '4,8 (312 avaliações)');
+  assert.equal(leadsUtil.textoDaAvaliacao(5, 1), '5 (1 avaliação)');
+  assert.equal(leadsUtil.textoDaAvaliacao(null, 10), 'Sem avaliação');
+  const linha = leads.criarLinha(leadMalicioso({ nota_maps: 4.7, avaliacoes: 55 }), () => {});
+  assert.ok(textos(linha).includes('4,7 (55 avaliações)'));
 });
 
 test('por que: sem regra batida e lead excluído explicam em português simples', () => {

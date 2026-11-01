@@ -50,7 +50,7 @@ Não decida sozinho: texto da licença da camada paga, nome do produto, parcelam
 
 ## Estado do projeto
 
-As fases 0 (verificação do motor em Docker), 1 (núcleo sem interface), 2 (servidor) e 3 (painel) estão concluídas, com pendências registradas em `arquitetura.md` (seção "Fase 3: critérios de pronto, item por item"). As principais: uma busca real rápida com a versão final, Google Planilhas e WhatsApp reais, Docker realmente parado, teste com leitor de tela e com uma pessoa leiga. A próxima é a fase 4 (entrevista e instalação), que começa por um plano aprovado.
+As fases 0 (verificação do motor em Docker), 1 (núcleo sem interface), 2 (servidor) e 3 (painel) estão concluídas, com pendências registradas em `arquitetura.md` (seção "Fase 3: critérios de pronto, item por item"). As principais: uma busca real rápida com a versão final, Google Planilhas e WhatsApp reais, Docker realmente parado, teste com leitor de tela e com uma pessoa leiga. A fase 4 (entrevista e instalação) está em andamento, com plano aprovado em 2026-11-01: os passos 1 e 2 (preparação, `entrevista/perguntas.md`, `kit/montar_perfil.py` e os três perfis de teste) estão prontos e aguardam aprovação; seguem os modelos de mensagem, o instalador, os textos para a IA e os ensaios reais. Os arquivos do comprador (CLAUDE.md, AGENTS.md, skill, prompt, iniciar) ficam em `pacote/` e o `.zip` sai de `python construcao/montar_pacote.py`.
 
 Decisões novas da fase 3 (valem daqui para frente):
 

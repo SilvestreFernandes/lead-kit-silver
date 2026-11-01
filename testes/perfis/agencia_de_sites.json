@@ -1,0 +1,15 @@
+{
+  "versao": 1,
+  "1": "Sites e automações com IA para negócios locais",
+  "2": {"nome": "Ana Souza", "empresa": "Estúdio Exemplo"},
+  "3": {"tipos": ["clínica de estética", "academia", "restaurante"], "porte": "pequeno"},
+  "4": {"regioes": ["Brasília-DF", "Sobradinho-DF"], "atendimento": "remoto"},
+  "5": {"regras": ["sem_site", "so_instagram", "nota_alta", "muitas_avaliacoes"], "outro": ""},
+  "6": {"evitar": ["franquia", "sem_telefone"], "concorrentes": [], "categorias": [], "outro": ""},
+  "7": "Uma clínica de estética que só usava Instagram.",
+  "8": ["whatsapp"],
+  "9": "amigavel",
+  "10": "diagnóstico grátis",
+  "11": "10-30",
+  "12": {"resposta": "nao", "detalhe": ""}
+}

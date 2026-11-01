@@ -1,0 +1,15 @@
+{
+  "versao": 1,
+  "1": "Embalagens para restaurantes e padarias",
+  "2": {"nome": "Carlos Lima", "empresa": "Embalagens Exemplo"},
+  "3": {"tipos": ["restaurante", "padaria", "pizzaria"], "porte": "qualquer"},
+  "4": {"regioes": ["Brasília-DF", "Goiânia-GO"], "atendimento": "ambos"},
+  "5": {"regras": ["nota_alta", "muitas_avaliacoes", "delivery"], "outro": "Que tenham fila no balcão"},
+  "6": {"evitar": ["concorrente", "categoria", "sem_telefone"], "concorrentes": ["Embalagens Rivais", "rival.exemplo.invalid"], "categorias": ["igreja", "escola"], "outro": ""},
+  "7": "",
+  "8": ["whatsapp", "email"],
+  "9": "direto",
+  "10": "amostra",
+  "11": "30-60",
+  "12": {"resposta": "nao", "detalhe": ""}
+}

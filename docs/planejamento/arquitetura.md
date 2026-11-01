@@ -31,13 +31,18 @@ lead-kit-silver/
   LICENSE                   MIT do kit original
   CREDITS.md                créditos do motor e do kit base (obrigatório)
   docker-compose.yml        motor em Docker, só em 127.0.0.1 (caminho principal da v1)
-  iniciar.bat               sobe motor e painel com um clique (Windows)
-  iniciar.sh                o mesmo no macOS e Linux
-  AGENTS.md                 regras para Codex e outras IAs
-  CLAUDE.md                 regras para o Claude Code
-  .claude/skills/lead-kit/  skill de qualificação e abordagem
+  CLAUDE.md                 só para quem constrói o kit (o do comprador fica em pacote/)
+  pacote/                   o que o comprador recebe na RAIZ do .zip, sem o prefixo pacote/
+    CLAUDE.md               regras para o Claude Code do comprador
+    AGENTS.md               regras para Codex e outras IAs
+    .claude/skills/lead-kit/  skill de qualificação e abordagem
+    INSTALAR.md             o prompt de instalação
+    iniciar.bat             sobe motor e painel e abre o navegador (Windows)
+    iniciar.sh              o mesmo no macOS e Linux
+  construcao/
+    montar_pacote.py        monta o .zip (só para quem constrói; não vai no pacote)
   entrevista/
-    perguntas.md            as 12 perguntas, na ordem
+    perguntas.md            as 12 perguntas, na ordem, com as opções numeradas
     esquema.json            formato e limites do perfil
     perfil.exemplo.json     exemplo preenchido
   kit/
@@ -56,6 +61,8 @@ lead-kit-silver/
     regras.json             tabela de regras e pesos padrão
     modelos.py              troca dos marcadores nas mensagens (adiantado na fase 2, com modelo provisório)
     validar_perfil.py       valida o perfil.json
+    montar_perfil.py        monta o perfil.json a partir de dados/respostas.json (sem IA), com resumo e "refazer"
+    instalar.py             pré-checagem do computador e progresso da instalação (passo da fase 4)
     banco.py                SQLite dos leads e do status
     painel/
       index.html            casca da página (o servidor escreve o token aqui)
@@ -72,7 +79,7 @@ lead-kit-silver/
       tela-oferta.js
   testes/
     fixtures.py             leads e perfil fictícios, em Python (o .gitignore bloqueia CSV)
-    perfis/                 três perfis de teste
+    perfis/                 três perfis de teste (respostas da entrevista) e os leads usados para comparar as listas
     test_banco.py
     test_buscar.py
     test_consulta.py
@@ -95,6 +102,9 @@ lead-kit-silver/
     demo_painel.py          servidor de demonstração com dados fictícios, um modo por estado do painel (ver o topo do arquivo)
     test_servidor.py
     test_xlsx.py
+    test_pacote.py          o .zip: o que entra, o que nunca entra e que sai igual duas vezes
+    test_entrevista.py      perguntas.md bate com a especificação e com o esquema
+    test_montar_perfil.py   respostas viram perfil válido; os três perfis de teste
     test_oferta.py          cortes do painel iguais aos do kit, descrições, pesos padrão intocados
     test_diagnostico.py
     test_privacidade.py     o que a tela diz que sai do computador bate com o que o código faz
@@ -153,14 +163,14 @@ O comprador abre a IA dele numa pasta vazia e cola o prompt de instalação. O p
 6. **Validação.** `python kit/validar_perfil.py`. Se falhar, a IA refaz só a pergunta com problema.
 7. **Teste de ponta a ponta.** Uma busca pequena (uma categoria, uma cidade, poucos resultados) pra provar que motor, nota e mensagem funcionam no computador dessa pessoa.
 8. **Painel.** `python kit/servidor.py` e o endereço `http://127.0.0.1:8787`. A IA abre o navegador e mostra o primeiro lead com nota e mensagem.
-9. **Atalho do dia a dia.** Um `iniciar.bat` (Windows) e um `iniciar.sh` (macOS e Linux) sobem motor e painel com um clique, sem precisar da IA.
+9. **Atalho do dia a dia.** O `iniciar.bat` (Windows) e o `iniciar.sh` (macOS e Linux) sobem o painel, ligam o motor se o Docker estiver aberto e abrem o navegador, sem precisar da IA. A instalação termina dizendo como abrir de novo: "clique duas vezes em iniciar".
 
 Pré-checagem do passo 2:
 
 | Item | Como confere | Se faltar |
 | --- | --- | --- |
 | Sistema | `platform.system()` no Python | Escolhe os comandos de Windows, macOS ou Linux |
-| Python 3.10 ou mais novo | `python --version`, ou `py -3 --version` no Windows | Instala pelo `winget` (Windows), Homebrew (macOS) ou gerenciador do sistema (Linux), ou usa o Python portátil da pasta `ferramentas/` |
+| Python 3.10 ou mais novo | `py -3 --version` e `python --version` no Windows. O atalho `python` que abre a Microsoft Store **não conta** como Python instalado. Se houver dois Pythons, o instalador diz qual responde | Instala pelo `winget` (única forma na v1, no Windows). Sem `winget`, o prompt para e explica. macOS e Linux só depois de ensaiados |
 | Docker rodando | `docker info` | Instala o Docker Desktop pelo `winget`, avisa que vai pedir permissão e reinício, e usa o pausar e retomar |
 | Portas 8080 e 8787 livres | Tenta abrir a porta | Pergunta se pode usar outra porta e grava no perfil |
 | Internet | Acessa a imagem do motor e o Nominatim | Explica que a busca precisa de conexão |
@@ -168,6 +178,10 @@ Pré-checagem do passo 2:
 
 Regras do prompt:
 
+- **Lista fechada de comandos.** O kit (`kit/instalar.py`) devolve, para cada passo, o comando exato que a IA pode executar. A IA só executa esses comandos, e só depois do "pode seguir". O `instalar.py` nunca instala nada sozinho.
+- **Janela de administrador.** Antes de um passo que abre a permissão do Windows (UAC), o instalador avisa e diz que a pessoa precisa clicar nela.
+- **Termos do Docker Desktop.** Antes de instalar, o prompt manda a pessoa conferir os termos de uso do Docker Desktop, sem afirmar nada além disso.
+- **Permissões da ferramenta.** O guia avisa que o Claude Code vai pedir permissão para cada comando e que isso é normal.
 - Nunca pede pra desligar antivírus, firewall ou as permissões de segurança da ferramenta de IA.
 - Cada falha tem uma mensagem em português dizendo o que aconteceu e o que fazer. A IA não tenta três gambiarras seguidas.
 - Se nenhum caminho do motor for possível na máquina, o prompt para e explica o motivo, em vez de improvisar outro caminho.
@@ -374,7 +388,7 @@ Regras fixas pro Claude Code durante toda a construção:
 | 1. Núcleo sem interface | `motor.py`, `geocodificar.py`, `banco.py`, limpeza do CSV, `pontuacao.py`, `regras.json`, `validar_perfil.py`, `esquema.json` | Um comando de terminal faz uma busca real e lista leads com nota e motivos, e os testes passam |
 | 2. Servidor | `servidor.py` com todas as rotas e a segurança local (Host, token, sem CORS) | Testes das rotas passam e uma busca roda pela API do começo ao fim |
 | 3. Painel | As três telas a partir do preview aprovado, com os estados de erro | Uma busca real, feita só pelo navegador, termina com leads e mensagens na tela |
-| 4. Entrevista e instalação | `perguntas.md`, `CLAUDE.md`, `AGENTS.md`, skill, `modelos.py`, prompt de instalação com instalação automática do que falta e pausar e retomar | Instalação do zero numa pasta limpa, no Windows, com o Claude Code, sem ajuda manual, inclusive num computador sem Python nem Docker |
+| 4. Entrevista e instalação | `perguntas.md`, `montar_perfil.py`, `modelos.py`, `instalar.py`, `pacote/` (`CLAUDE.md`, `AGENTS.md`, skill, prompt, `iniciar.bat` e `iniciar.sh`), `construcao/montar_pacote.py`, instalação do que falta e pausar e retomar | Instalação do zero numa pasta limpa, no Windows, com o Claude Code, sem ajuda manual, inclusive num computador sem Python nem Docker |
 | 5. Pacote e testes de perfil | `.zip`, `iniciar.bat` e `iniciar.sh`, guias, os três perfis de teste, teste no Codex | Todos os critérios de aprovação do documento da entrevista cumpridos |
 
 Depois da fase 5, fora do escopo da v1: refino do design do painel, motor como programa direto (sem Docker, ver `fase0-verificacao-motor.md`) e uma segunda versão do kit.

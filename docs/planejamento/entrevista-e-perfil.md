@@ -11,7 +11,7 @@ A entrevista roda na IA do usuário (Claude Code ou Codex). O painel nunca chama
 1. **Pré-checagem:** a IA detecta o sistema, confere Python e Docker, lista o que vai instalar e pede confirmação.
 2. **Instalação:** instala o que faltar e liga o motor local na versão fixada, acessível só pelo próprio computador. Se precisar de reinício ou de outra ação do cliente, pausa e retoma depois (ver `arquitetura.md`).
 3. **Entrevista:** 12 perguntas, uma por vez, em português.
-4. **Perfil:** a IA grava o arquivo `perfil.json` e escreve os modelos de mensagem.
+4. **Perfil:** a IA grava as respostas em `dados/respostas.json`, uma a uma, e o script `kit/montar_perfil.py` monta o `perfil.json`. Os modelos de mensagem são gerados pelo kit (por tom e canal) e a IA só mostra e ajusta com a pessoa (ver "Modelos de mensagem").
 5. **Validação:** um script confere o perfil e aponta o que falta ou está errado.
 6. **Teste:** uma busca pequena, com o perfil do usuário, pra confirmar que tudo funciona.
 7. **Painel:** abre já configurado. O usuário pode refazer a entrevista ou editar o perfil quando quiser.
@@ -27,6 +27,9 @@ A IA segue um roteiro fixo, pra que o resultado seja parecido em qualquer comput
 - No fim, mostra um resumo em linguagem natural e só grava o perfil depois do "confirmo".
 - Não pede CPF, senhas nem dados de clientes. O perfil fica só no computador do usuário.
 - Para refazer, o usuário pede "refazer perfil". O perfil antigo vira `perfil.anterior.json` antes de ser substituído.
+- **As respostas são gravadas uma a uma** em `dados/respostas.json` (formato em `entrevista/perguntas.md`). Assim a entrevista pode parar e voltar sem perder nada, e quem monta o perfil é o script `kit/montar_perfil.py`, que não depende de IA e é testado com os três perfis de teste.
+- **Desdobramento da pergunta 6 (não é uma 13ª pergunta).** Se a pessoa marcar "concorrentes", a IA pergunta, ainda dentro da pergunta 6, quais são (nomes ou sites, um por vez ou separados por vírgula). Se marcar "categorias específicas", pergunta quais. O script não deixa montar o perfil com "concorrentes" ou "categorias" marcados e a lista vazia.
+- **"Outra resposta" nas perguntas 5 e 6** não vira regra, porque as regras vêm só de dados que o Google Maps entrega. A IA diz isso com simplicidade e o texto fica em `dados/respostas.json`, sem efeito na nota.
 
 ## As perguntas
 
@@ -39,7 +42,7 @@ São 12 perguntas, e só a 7 é opcional. A última coluna mostra qual campo do 
 | 3 | Quem é o seu cliente ideal? | Tipos de negócio em texto livre. Porte: pequeno, médio, grande ou qualquer | `cliente.tipos`, `cliente.porte` |
 | 4 | Onde você atende? | Cidades e estados, ou todo o Brasil. Presencial, remoto ou os dois | `cliente.regioes`, `negocio.atendimento` |
 | 5 | O que faz um negócio ser um bom lead pra você? | Várias: não tem site, só usa Instagram, nota baixa, nota alta, poucas avaliações, muitas avaliações, tem delivery, aceita reserva, sem e-mail publicado, outro | `pontuacao.regras` |
-| 6 | O que você quer evitar? | Redes e franquias, categorias específicas, concorrentes, sem telefone, nota muito baixa, outro | `exclusoes` |
+| 6 | O que você quer evitar? | Redes e franquias, categorias específicas, concorrentes, sem telefone, nota muito baixa, outro (se marcar concorrentes ou categorias, a IA pergunta quais, dentro da mesma pergunta) | `exclusoes`, `exclusoes_concorrentes`, `exclusoes_categorias` |
 | 7 | Quem foi o seu melhor cliente até hoje? (opcional) | Texto livre, usado só pra calibrar as regras | `cliente.exemplo` |
 | 8 | Como você prefere abordar? | WhatsApp, e-mail, ligação, visita, mais de um | `abordagem.canais` |
 | 9 | Qual o tom das mensagens? | Amigável, direto ou formal | `abordagem.tom` |
@@ -130,20 +133,25 @@ Como funciona:
 
 ## Modelos de mensagem
 
-Depois do resumo da entrevista, a IA escreve os modelos uma vez e salva no perfil. O painel só troca os marcadores pelos dados de cada lead. Nenhuma IA é chamada quando a pessoa usa o painel.
+Modelo **híbrido** (decidido em 2026-11-01). O kit gera modelos seguros por tom (pergunta 9) e por canal (pergunta 8). A IA pode reescrever a linha da oferta e ajustar o tom junto com a pessoa, mostrando o resultado antes do "confirmo". **Todo texto, venha do kit ou da IA, passa pelo mesmo validador** (`kit/validar_perfil.py`), e só é salvo se passar. O painel só troca os marcadores pelos dados de cada lead. Nenhuma IA é chamada quando a pessoa usa o painel.
 
-Marcadores disponíveis: `{nome}` (nome do negócio), `{cidade}`, `{categoria}`, `{motivo}` (o principal motivo da nota, em uma frase), `{meu_nome}`, `{minha_empresa}`.
+Marcadores disponíveis: `{nome}` (nome do negócio), `{cidade}`, `{categoria}`, `{motivo}` (o motivo da nota, em uma frase), `{meu_nome}`, `{minha_empresa}`.
 
-O que a IA deve seguir ao escrever:
+O que o validador exige de cada modelo:
 
-- Mensagem curta, de 3 a 5 linhas, no tom escolhido na pergunta 9.
+- **Marcadores obrigatórios:** `{meu_nome}`, `{minha_empresa}` e `{motivo}`, e uma linha do que a pessoa oferece (vinda de `negocio.oferta` e da oferta de entrada da pergunta 10).
+- **Só marcadores permitidos**, e **nenhum artigo antes de `{nome}`**: "Vi que {nome} tem...", nunca "Vi que a {nome} tem..." nem "o {nome}". O gênero do negócio é desconhecido (ver `arquitetura.md`). O mesmo vale para "da", "do", "na" e "no" antes de `{nome}` e `{categoria}`.
+- **Saída clara (opt-out)**, por exemplo "se não fizer sentido, é só me avisar que não escrevo mais".
+- **Sem promessa de renda, de resultado ou de quantidade**, e sem pressão ou urgência inventada.
+- **Tamanho:** curto, de 3 a 5 linhas, dentro do limite do arquivo.
+
+O que a IA e o kit devem seguir ao escrever:
+
 - Começar pelo negócio do lead, não por quem escreve.
-- Citar um fato real e verificável, usando `{motivo}`. Nada de elogio genérico.
-- Nunca pôr artigo antes de `{nome}`: "Vi que {nome} tem...", não "Vi que a {nome} tem...". O gênero do negócio é desconhecido (ver `arquitetura.md`).
-- Terminar com a oferta de entrada da pergunta 10 e uma pergunta fácil de responder.
-- Sem promessa de resultado, sem pressão, sem urgência inventada.
-- Dar uma saída clara, por exemplo "se não fizer sentido, é só me avisar que não escrevo mais".
-- Um modelo por canal escolhido na pergunta 8. A IA mostra os modelos e só salva depois do "confirmo".
+- Terminar com a oferta de entrada e uma pergunta fácil de responder.
+- Um modelo por canal escolhido na pergunta 8. Só são salvos depois do "confirmo".
+
+**Gancho.** A abertura da mensagem usa um **gancho**: um fato verificável dos dados do lead (por exemplo "não achei um site no perfil do Google Maps"), vindo de `{motivo}`. O gancho nunca é elogio genérico nem promessa. Cada regra de nota tem a sua frase de abertura em `kit/regras.json`. Regra sem gancho bom (por exemplo só "nota alta") **não gera mensagem automática**: o lead continua com nota e motivo na lista, o painel diz em português simples que não há mensagem pronta para aquele motivo e a pessoa pode escrever a dela. No resumo antes do "confirmo", a IA mostra a abertura de cada regra escolhida e a pessoa pode tirar as que não servem. Isso não é uma pergunta nova.
 
 Exemplo de WhatsApp no tom amigável:
 
@@ -162,6 +170,7 @@ Antes de o painel abrir, um script simples (`kit/validar_perfil.py`) confere o `
 | Pesos são inteiros de 0 a 5 | Ajusta pro limite e avisa |
 | `corte_a` é maior que `corte_b` | Recalcula os cortes |
 | Cada modelo de mensagem só usa marcadores permitidos | Mostra o marcador inválido |
+| Cada modelo tem `{meu_nome}`, `{minha_empresa}`, `{motivo}`, nenhum artigo antes de `{nome}` e sem promessa de renda ou de resultado | Mostra o que falta ou o que sobra |
 | Cada modelo tem uma saída clara (opt-out) | Pede pra IA reescrever |
 | Sem dados sensíveis no perfil (documentos, senhas, dados de saúde) | Remove o campo e avisa |
 
@@ -173,7 +182,10 @@ O kit raspa o Google Maps, o que viola os termos de uso do Google, e lida com te
 
 Na instalação:
 
-- A IA lista tudo o que vai instalar e pede confirmação a cada passo.
+- A IA lista tudo o que vai instalar e pede confirmação a cada passo. Os comandos de instalação vêm de uma **lista fechada** devolvida pelo kit; a IA os executa só depois do "pode seguir" e nunca inventa outro.
+- Antes de um passo que abre a janela de permissão de administrador do Windows, a IA avisa e diz que a pessoa precisa clicar nela.
+- O Docker Desktop tem termos de uso próprios (a licença depende do tamanho da empresa). O prompt e o guia mandam a pessoa **conferir os termos** antes de instalar, sem afirmar mais nada sobre eles.
+- O guia avisa que o Claude Code vai pedir permissão para cada comando e que isso é normal: é a própria ferramenta pedindo, e a pessoa aprova um por vez.
 - O prompt nunca manda a pessoa desligar permissões de segurança da ferramenta dela.
 - O motor roda só em `127.0.0.1`, sem exposição na internet.
 - A versão do motor fica fixada (`gosom/google-maps-scraper:v1.18.1`) e os créditos e a licença MIT do autor original ficam no kit.
@@ -212,12 +224,16 @@ Critérios de aprovação:
 
 ## Critérios de pronto da fase 4 (mensagens)
 
-Anotados em 2026-10-30, para valer quando a fase 4 mexer nos modelos de mensagem. Nada disso foi mudado ainda.
+Anotados em 2026-10-30 e decididos em 2026-11-01. Os testes da fase 4 conferem cada um com perfis fictícios.
 
-- **O modelo final de mensagem sempre contém** `{meu_nome}`, `{minha_empresa}` e uma linha do que a pessoa oferece (vinda do perfil). Mensagem sem essas três partes não é gerada.
-- **Cada regra de nota precisa de uma frase de abertura** que sirva de gancho para quem vende o serviço do perfil (por exemplo, "não achei um site no perfil do Google Maps" é gancho para quem vende sites).
-- **Regra sem gancho bom não gera mensagem automática.** Exemplo: só "nota alta". O lead continua com nota e motivo na lista, mas o painel não escreve uma mensagem pronta para ele, e diz isso em português simples em vez de inventar uma abertura.
-- Os testes da fase 4 conferem as três coisas acima com perfis fictícios.
+- **O modelo final de mensagem sempre contém** `{meu_nome}`, `{minha_empresa}`, `{motivo}` e uma linha do que a pessoa oferece. Mensagem sem essas partes não é salva.
+- **Cada regra de nota tem uma frase de abertura** que afirma só um fato verificável dos dados do lead, nunca elogio genérico nem promessa.
+- **Regra sem gancho bom não gera mensagem automática.** O lead continua com nota e motivo na lista, e o painel diz em português simples que não há mensagem pronta, sem inventar uma abertura.
+- **Um só validador** para o texto do kit e para o texto reescrito pela IA.
+
+## Material de venda
+
+Até passar o ensaio de cada caso, o material de venda só cita o que foi testado: **Windows x64 e Claude Code**. macOS, Linux e Codex só entram depois de um ensaio aprovado de cada um. Nenhum texto afirma acessibilidade (o leitor de tela não foi testado).
 
 ## Pontos em aberto
 

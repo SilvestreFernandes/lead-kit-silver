@@ -24,6 +24,7 @@
   },
   "exclusoes": ["franquia", "sem_telefone"],
   "exclusoes_concorrentes": [],
+  "exclusoes_categorias": [],
   "abordagem": {
     "canais": ["whatsapp"],
     "tom": "amigavel",

@@ -1,0 +1,15 @@
+{
+  "versao": 1,
+  "1": "Contabilidade para pequenos negócios",
+  "2": {"nome": "Marina Alves", "empresa": ""},
+  "3": {"tipos": ["comércio de bairro", "salão de beleza", "loja de roupas"], "porte": "pequeno"},
+  "4": {"regioes": ["Brasília - DF"], "atendimento": "presencial"},
+  "5": {"regras": ["so_instagram", "poucas_avaliacoes"], "outro": ""},
+  "6": {"evitar": ["franquia"], "concorrentes": [], "categorias": [], "outro": ""},
+  "7": "Uma loja de roupas com dois funcionários.",
+  "8": ["email", "ligacao"],
+  "9": "formal",
+  "10": "reunião rápida",
+  "11": "ate-10",
+  "12": {"resposta": "sim", "detalhe": "conselho de contabilidade (CRC)"}
+}

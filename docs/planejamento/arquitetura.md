@@ -294,6 +294,41 @@ Comportamentos que valem desde a v1:
 - O painel avisa uma vez, na primeira busca grande, sobre o risco de bloqueio temporário do IP.
 - Respeita `prefers-reduced-motion` e funciona em tela de notebook e de celular.
 
+## Fase 3: critérios de pronto, item por item
+
+Conferidos em 2026-11-01, com a suíte automatizada (451 testes, sem rede), medições no navegador e prints em `prints/` (que não vai para o git). Legenda: **feito** (há teste, print ou medição), **parcial** (feito, mas falta algo dito na coluna), **não feito**.
+
+| # | Critério | Estado | Evidência e ressalvas |
+| --- | --- | --- | --- |
+| 1 | As três telas (Buscar, Leads, Minha oferta), a partir do visual aprovado | **feito** | Visual "Instrumento" (direção A), aprovado em duas etapas. Prints `etapa1-*` e `etapa2-*`, claro e escuro, 1280 e 390 px |
+| 2 | Uma busca real, feita só pelo navegador, termina com leads e mensagens na tela | **parcial** | Feito com o Google de verdade antes do redesign (busca rápida: 16 negócios; média: 65 e 88 em duas execuções, em `fase0-verificacao-motor.md`). **Não repetida com a versão final** (visual novo e "buscador"): falta uma busca rápida real de ponta a ponta |
+| 3 | Estados de erro com mensagem própria (buscador desligado, Docker parado ou ausente, perfil ausente ou inválido, cidade não encontrada, falha no meio, resultado zero, busca interrompida, formato desconhecido) | **parcial** | 14 estados da demonstração × 2 telas × 2 tamanhos: sem erro de JavaScript, sem rolagem lateral e nenhuma letra abaixo de 13 px. Ressalvas: Docker parado e ausente só foram testados com a saída de `docker info` simulada (nunca com o Docker real parado); a faixa "o kit parou de responder" e a de "página desatualizada" (token) têm teste das funções, mas não foram vistas com o visual novo |
+| 4 | Perfil ausente ou inválido abre numa tela que explica o que fazer, e o link leva à etapa do primeiro problema | **feito** | Prints de perfil ausente e inválido; link testado no navegador para a etapa 1 e para a etapa 5 (`perfil_invalido_mensagem`); mapeamento de mensagem para etapa testado em Node |
+| 5 | Buscador desligado: aviso com o que fazer, e Leads continua funcionando | **feito** | Faixa e bloco com o botão "Ligar o buscador" e passo a passo recolhido (prints). O clique real ligou o motor de verdade com o Docker, antes de trocar "motor" por "buscador" nas telas |
+| 6 | Leads: tabela, filtros, carregamento por partes, gaveta com a lista de pontos, status, anotação e exportação | **parcial** | Testes de JavaScript e do servidor; 650 leads no navegador; xlsx e CSV (excluídos no fim como "Fora da lista"); .xlsx aberto no Excel. **Google Planilhas não foi aberto** (sem acesso a uma conta aqui) |
+| 7 | Mensagem pronta por lead e WhatsApp com envio sempre manual | **parcial** | Mensagem vem de modelos salvos (testes); o link `wa.me` é montado e testado; só abre com clique, um lead por vez, sem envio em massa. **Abrir o WhatsApp de verdade não foi testado** |
+| 8 | Minha oferta: editar o perfil em cinco etapas e dar nota de novo | **feito** | Testes de Node e do servidor; navegador: etapas clicáveis, valores mantidos, salvar de qualquer etapa, erros, barra de salvar (computador e celular), pesos 4 e 5. Notas dos pesos padrão idênticas e salvar sem mexer não muda nenhum peso |
+| 9 | Segurança do painel: sem `innerHTML`, `fetch` só em `api.js`, sem URL externa, sem travessão; dado do Google só vira texto | **feito** | `testes/test_painel.py`, `testes/js/leads.test.mjs` (nome malicioso), `testes/test_visual.py` |
+| 10 | Servidor: Host, token e sem CORS, inclusive na rota de ligar o buscador | **feito** | `TestSeguranca` e `TestLigarMotor` em `testes/test_servidor.py` (a rota entra nas listas de segurança) |
+| 11 | O que sai do computador é dito na tela e confere com o código | **feito** | `testes/test_privacidade.py`; só o nome da cidade e o estado vão ao Nominatim (OpenStreetMap), com limite de 1 pedido por segundo, cache e User-Agent |
+| 12 | Nenhuma IA no painel | **feito** | Nota e mensagem saem de regras e modelos; nenhuma chamada externa no código do painel (teste de URLs) |
+| 13 | Leitura fácil para leigos: corpo em 16 px, nada abaixo de 13 px, alvos de 44 px, números em fonte própria, contraste | **feito** | Testes do CSS e medições nos dois temas. Instruções "onde e como" em todas as telas. **Nenhuma pessoa leiga usou o painel**: a clareza para um iniciante real não foi testada |
+| 14 | Celular (390 px) sem rolagem lateral | **feito** | Medido em 360, 390 e 1280 px nas três telas e nas cinco etapas de Minha oferta |
+| 15 | Teclado: foco visível, gaveta presa e Esc devolve o foco | **feito** | Tab em todas as telas nos dois temas (contorno com contraste mínimo de 4,9) e gaveta |
+| 16 | Leitor de tela | **não feito** | A marcação tem rótulos, grupos, avisos e `role`, mas ninguém abriu o painel com NVDA, Narrador ou outro. **Nenhum texto de venda, guia ou página pode afirmar acessibilidade** antes desse teste |
+| 17 | Desempenho | **feito** | Dar nota de novo a 5000 leads: cerca de 0,2 s. Lista com 650 leads por partes de 100 |
+| 18 | Tema claro e escuro | **feito** | Prints dos dois temas em todas as telas e etapas. As etapas 2 e 4 de Minha oferta em escuro foram vistas na rodada final (`etapa2-oferta-etapa{2,4}-escuro-*`) |
+| 19 | Testes automatizados passam sem rede | **feito** | 451 testes (Python mais Node), rodados três vezes seguidas em 2026-11-01 |
+
+Pendências que ficam para depois da fase 3:
+
+1. Uma busca real rápida com a versão final (um minuto), pelo `iniciar` ou pelo painel.
+2. Abrir a planilha de exemplo no Google Planilhas e o WhatsApp de verdade com uma mensagem.
+3. Docker real parado e ausente (hoje só simulados), e a faixa de "kit parou" e de token vencido com o visual novo.
+4. Teste com leitor de tela e com uma pessoa leiga.
+5. A busca ampla continua "em breve": não medida, não definida.
+6. Decisões em aberto da lista do `CLAUDE.md` (nome do produto, licença da camada paga, parcelamento no Kiwify, pesos padrão, perguntas da entrevista).
+
 ## Regras dos modelos de mensagem
 
 Valem para a IA que escreve os modelos (fase 4), para o `perfil.json` e para o modelo provisório que o kit usa até lá. A lista completa de regras de escrita está em `entrevista-e-perfil.md`.

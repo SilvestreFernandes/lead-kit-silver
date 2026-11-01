@@ -50,7 +50,18 @@ Não decida sozinho: texto da licença da camada paga, nome do produto, parcelam
 
 ## Estado do projeto
 
-As fases 0 (verificação do motor em Docker), 1 (núcleo sem interface) e 2 (servidor) estão concluídas. A fase 3 (painel) está em andamento, etapa por etapa: as etapas 1 a 5 (API, tela Leads, exportação, tela Buscar, Minha oferta) estão commitadas. O redesign (direção "Instrumento") está na etapa 2 de 2: Buscar e Minha oferta prontas, aguardando aprovação. Faltam os estados finais. Todo texto que manda a pessoa executar algo usa o passo a passo de kit/painel/instrucoes.js (onde e como abrir o terminal). O botão "Ligar o motor" (kit/ligar_motor.py) é o caminho principal quando o Docker está ligado; o passo a passo manual fica como alternativa.
+As fases 0 (verificação do motor em Docker), 1 (núcleo sem interface), 2 (servidor) e 3 (painel) estão concluídas, com pendências registradas em `arquitetura.md` (seção "Fase 3: critérios de pronto, item por item"). As principais: uma busca real rápida com a versão final, Google Planilhas e WhatsApp reais, Docker realmente parado, teste com leitor de tela e com uma pessoa leiga. A próxima é a fase 4 (entrevista e instalação), que começa por um plano aprovado.
+
+Decisões novas da fase 3 (valem daqui para frente):
+
+- **Visual:** direção "Instrumento" (prata e grafite, claro e escuro, menu lateral no computador e barra no topo no celular). Fontes só IBM Plex Sans e Mono, dentro de `kit/painel/fontes/`. Regras de leitura testadas: corpo em 16 px, nada abaixo de 13 px, alvos de 44 px, fonte de números só para números e comandos.
+- **Nome do produto:** definido só em `kit/produto.py` (o nome ainda é decisão em aberto). O servidor o coloca no HTML e na planilha.
+- **Palavras da tela:** "buscador" no lugar de "motor". Código, testes e documentação técnica continuam com "motor".
+- **Nota:** letra dentro de uma forma (A círculo cheio, B quadrado só de contorno, C losango), com pontos ao lado; quem está fora da lista não ganha letra nem cor.
+- **Minha oferta:** cinco etapas, e cada regra tem "Quanto importa": Ignorar 0, Pouco 1, Importa 2, Muito 3 (o esquema aceita 0 a 5; 4 ou 5 aparece como "Personalizado"). Regra ausente e peso 0 dão a mesma nota. Salvar é recusado enquanto uma busca roda.
+- **Botão "Ligar o buscador":** caminho principal quando o Docker está ligado (`kit/ligar_motor.py`, comando fixo, em segundo plano, log em `dados/`); o passo a passo manual é a alternativa. Todo texto que manda executar algo usa `kit/painel/instrucoes.js`.
+- **Planilha:** excluídos só vão se pedidos, ao final, como "Fora da lista"; o exemplo do produto é `testes/gerar_exemplo_planilha.py` (dados fictícios limpos).
+- **Acessibilidade:** leitor de tela NÃO foi testado. Nenhum texto de venda pode afirmar acessibilidade antes disso.
 
 Fato medido do motor: ele entrega cerca de 20 negócios por palavra-chave e por ponto, e a profundidade (`depth`) quase não muda isso. Por isso o tamanho da busca é uma grade de pontos (`kit/grade.py`): a rápida usa 1 ponto, a média usa 5 (medida em Brasília: 65 negócios únicos contra 16). A busca ampla ainda não foi medida e aparece como "em breve". Não defina a ampla sem medir antes. Os números estão em `fase0-verificacao-motor.md`.
 

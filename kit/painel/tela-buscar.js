@@ -170,13 +170,14 @@ export function montarBuscar(raiz, ctx) {
 
   const anuncio = el('div', { class: 'so-leitor', role: 'status', 'aria-live': 'polite' });
   const areaMotor = el('div', {});
-  const areaResumo = el('div', {});
+  const areaResumo = el('div', {});        // resultado de sucesso: fica abaixo do formulário
+  const areaResumoAlerta = el('div', {});  // erro, resultado zero ou parcial: fica acima do formulário, para não passar batido
   const areaProgresso = el('div', {});
   const areaFormulario = el('div', {});
   const areaHistorico = el('div', {});
   raiz.append(
     cabecalhoDaTela('Buscar leads', 'Responda três perguntas. O painel busca no Google Maps e já dá nota a cada negócio.'),
-    anuncio, areaMotor, areaProgresso, areaFormulario, areaResumo, areaHistorico);
+    anuncio, areaMotor, areaProgresso, areaResumoAlerta, areaFormulario, areaResumo, areaHistorico);
 
   // ---- estado do motor
   const motorNoAr = () => { const e = ctx.estado(); return !e || e.motor_no_ar !== false; };
@@ -385,6 +386,7 @@ export function montarBuscar(raiz, ctx) {
     ctx.atualizarEstado();
     if (ctx.recarregarContagem) ctx.recarregarContagem();
     const busca = estado.buscas.find((b) => b.id === id);
+    estado.levarAoResultado = true;
     if (busca) avisar(busca.status === 'ok' ? 'A busca terminou.' : 'A busca terminou com erro.');
     desenhar();
   }
@@ -435,6 +437,7 @@ export function montarBuscar(raiz, ctx) {
   function desenhar() {
     if (!vivo) return;
     limpar(areaResumo);
+    limpar(areaResumoAlerta);
     limpar(areaHistorico);
     desenharMotor();
     desenharProgresso();
@@ -444,12 +447,19 @@ export function montarBuscar(raiz, ctx) {
     const terminadas = estado.buscas.filter((b) => b.status === 'ok' || b.status === 'erro');
     const ultima = terminadas[0];
     if (ultima && ultima.id !== estado.escondidoId) {
-      areaResumo.append(criarResumo(ultima, {
+      const cartao = criarResumo(ultima, {
         aoVerLeads: () => ctx.irPara('leads', { busca: ultima.id }),
         aoVerTodos: () => ctx.irPara('leads'),
         aoOutra: () => { estado.escondidoId = ultima.id; desenhar(); ref.categoria.focus(); },
         aoRepetir: () => repetir(ultima),
-      }));
+      });
+      (resumoDaBusca(ultima).tipo === 'sucesso' ? areaResumo : areaResumoAlerta).append(cartao);
+      if (estado.levarAoResultado) {  // a busca acabou de terminar nesta tela: mostra o resultado, onde quer que ele esteja
+        estado.levarAoResultado = false;
+        cartao.setAttribute('tabindex', '-1');
+        cartao.focus({ preventScroll: true });
+        cartao.scrollIntoView({ block: 'nearest' });
+      }
     }
     const historico = criarHistorico(terminadas.slice(ultima && ultima.id === estado.escondidoId ? 0 : 1, 6), (id) => ctx.irPara('leads', { busca: id }));
     if (historico) areaHistorico.append(historico);

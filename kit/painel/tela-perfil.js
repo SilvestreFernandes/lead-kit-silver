@@ -2,6 +2,7 @@
 // O perfil é feito pela IA do usuário, numa entrevista curta. O painel só explica como e confere de novo.
 import { el, blocoEstado, avisar, passoAPasso } from './dom.js';
 import { PASSOS_PERFIL_AUSENTE } from './instrucoes.js';
+import { etapaDoErro } from './oferta-util.js';
 
 function botaoVerificar(aoVerificar, aindaFalta, primario) {
   const botao = el('button', { class: 'btn' + (primario ? ' btn-primary' : ''), type: 'button' }, 'Verificar de novo');
@@ -52,7 +53,7 @@ export function montarPerfilInvalido(raiz, { erros, aoVerificar, irPara }) {
     extras: [
       lista,
       el('div', { class: 'acoes' },
-        el('button', { class: 'btn btn-primary', type: 'button', onClick: () => irPara('oferta') }, 'Corrigir em Minha oferta'),
+        el('button', { class: 'btn btn-primary', type: 'button', onClick: () => irPara('oferta', { etapa: etapaDoErro(erros && erros[0]) }) }, 'Corrigir em Minha oferta'),
         botaoVerificar(aoVerificar, 'O perfil ainda tem problemas.', false)),
       el('p', {}, 'Se preferir, peça para a sua IA refazer a entrevista. O perfil antigo fica guardado como perfil.anterior.json.'),
     ],

@@ -1,4 +1,5 @@
 """Tela Minha oferta: o que o painel calcula sozinho precisa bater com o que o kit calcula."""
+import re
 import unittest
 from pathlib import Path
 
@@ -33,6 +34,14 @@ class TestOferta(unittest.TestCase):
                                  "reserva": 1, "sem_email": 1})
         self.assertEqual(validar_perfil.REGRAS["cortes"], {"a": 0.7, "b": 0.4})
 
+    def test_todo_peso_padrao_cabe_em_um_dos_quatro_niveis(self):
+        # Ignorar 0, Pouco 1, Importa 2, Muito 3: os padroes do kit ficam exatamente em um nivel, sem "Personalizado".
+        for rid, cfg in validar_perfil.REGRAS["regras"].items():
+            self.assertIn(cfg["peso"], (1, 2, 3), rid)
+
+    def test_o_esquema_continua_aceitando_de_0_a_5(self):
+        self.assertEqual((validar_perfil.ESQUEMA["peso_minimo"], validar_perfil.ESQUEMA["peso_maximo"]), (0, 5))
+
     def test_a_tela_so_edita_campos_das_12_perguntas(self):
         tela = (PAINEL / "tela-oferta.js").read_text(encoding="utf-8")
         for campo in ("negocio.oferta", "negocio.nome", "negocio.empresa", "cliente.tipos", "cliente.porte",
@@ -41,6 +50,14 @@ class TestOferta(unittest.TestCase):
                       "conformidade.restricoes", "exclusoes", "pontuacao.regras"):
             objeto, _, chave = campo.partition(".")
             self.assertIn(chave or objeto, tela, campo)
+
+    def test_a_tela_obedece_a_funcao_pura_e_nao_decide_o_nivel_sozinha(self):
+        tela = (PAINEL / "tela-oferta.js").read_text(encoding="utf-8")
+        self.assertIn("estadoDosNiveis(", tela)
+        self.assertIn("marcarNiveis(", tela)
+        self.assertNotIn("nivelDoPeso", tela)
+        self.assertNotIn("pesoDaRegra", tela)
+        self.assertIsNone(re.search(r"\.peso\s*[<>=]", tela))  # nenhuma comparacao de peso dentro da tela
 
     def test_texto_da_tela_nao_usa_travessao(self):
         for nome in ("tela-oferta.js", "oferta-util.js"):

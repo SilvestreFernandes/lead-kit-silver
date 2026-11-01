@@ -1,42 +1,52 @@
 // Tela Minha oferta: edita o perfil (as respostas da entrevista), as regras de nota, o que evitar e as mensagens.
-// Salvar grava o perfil e dá nota de novo aos leads. Nenhuma IA é chamada aqui: é só um formulário.
+// São cinco etapas, todas clicáveis a qualquer momento. Salvar vale de qualquer etapa: grava o perfil e dá nota de
+// novo aos leads. Nenhuma IA é chamada aqui: é só um formulário.
 import { ler, escrever, ErroApi } from './api.js';
 import { el, limpar, blocoEstado, blocoCarregando, cabecalhoDaTela } from './dom.js';
 import {
   ROTULOS_DE_MARCADOR, ROTULOS_DE_CANAL, ROTULOS_DE_TOM, ROTULOS_DE_PORTE, ROTULOS_DE_ATENDIMENTO, CANAIS_COM_MODELO,
-  LIMITE_DO_TEXTO, LIMITE_DA_OFERTA, LIMITE_DO_MODELO,
+  LIMITE_DO_TEXTO, LIMITE_DA_OFERTA, LIMITE_DO_MODELO, NIVEIS_DE_PESO, ETAPAS,
   copiar, mudou, rascunhoDoPerfil, adicionarNaLista, removerDaLista, restricaoParaForm, restricaoParaPerfil,
-  somaDosPesos, cortesAutomaticos, previaDaMensagem, exemploDePrevia, inserirMarcador,
-  conferirRascunho, perfilParaSalvar, resumoDaReavaliacao,
+  somaDosPesos, cortesAutomaticos, previaDaMensagem, exemploDePrevia, inserirMarcador, estadoDosNiveis, marcarNiveis, definirNivel,
+  etapaDoCampo, etapaDoErro, conferirRascunho, perfilParaSalvar, resumoDaReavaliacao,
 } from './oferta-util.js';
 
 export const TEXTO_SALVAR = 'Ao salvar, o painel dá nota de novo a todos os leads com as regras novas. Nenhum lead é apagado e nenhuma mensagem é enviada.';
 export const TEXTO_SEM_IA = 'Nada aqui usa IA. Os textos ficam salvos só no seu computador, e o painel apenas troca os marcadores pelos dados de cada negócio.';
+export const DURACAO_DO_TUDO_SALVO_MS = 8000;
 
 // O que a pessoa editou e ainda não salvou fica guardado enquanto a página estiver aberta,
 // para não perder nada ao trocar de aba. Se o perfil mudou no arquivo, o rascunho é descartado.
 let pendente = null;
-// O aviso de "perfil salvo" também fica guardado: ao salvar, o kit pode passar a ver o perfil como válido e a tela é montada de novo.
-let ultimoResultado = '';
+// A frase de "tudo salvo" é curta e temporária. Fica guardada fora da tela porque, ao salvar, o kit pode passar a
+// ver o perfil como válido e a tela é montada de novo.
+let ultimoResultado = { texto: '', ate: 0 };
+let ultimaEtapa = 1;
 
 export function descartarRascunhoGuardado() {
   pendente = null;
-  ultimoResultado = '';
+  ultimoResultado = { texto: '', ate: 0 };
+  ultimaEtapa = 1;
 }
 
 export function montarOferta(raiz, ctx) {
+  const recado = ctx.consumirParametros ? ctx.consumirParametros() : null;
   const estado = {
     opcoes: null, original: null, rascunho: null, errosDoPerfil: [], avisosDoPerfil: [],
-    erros: [], errosDoServidor: [], resultado: ultimoResultado, salvando: false, carregando: true, erro: null,
+    erros: [], errosDoServidor: [], salvando: false, carregando: true, erro: null,
+    etapa: recado && recado.etapa >= 1 && recado.etapa <= ETAPAS.length ? recado.etapa : ultimaEtapa,
   };
   let vivo = true;
+  let temporizadorDoSalvo = null;
   const ref = { ouvintes: [] };
 
   const anuncio = el('div', { class: 'so-leitor', role: 'status', 'aria-live': 'polite' });
+  const salvo = el('p', { class: 'tudo-salvo', role: 'status', hidden: true });
   const area = el('div', {});
   raiz.append(
     cabecalhoDaTela('Minha oferta', 'Conte o que você vende e como prefere falar. É com isso que o painel dá nota aos negócios e escreve as mensagens.'),
-    anuncio, area);
+    el('p', { class: 'hint texto-fixo' }, TEXTO_SALVAR),
+    anuncio, salvo, area);
 
   const sujo = () => !!estado.rascunho && mudou(estado.rascunho, estado.original);
   const avisoDeSaida = (evento) => { if (sujo()) { evento.preventDefault(); evento.returnValue = ''; } };
@@ -45,6 +55,14 @@ export function montarOferta(raiz, ctx) {
   function anunciar(texto) {
     anuncio.textContent = '';
     setTimeout(() => { anuncio.textContent = texto; }, 30);
+  }
+
+  function mostrarTudoSalvo() {
+    clearTimeout(temporizadorDoSalvo);
+    const restante = ultimoResultado.ate - Date.now();
+    salvo.hidden = !(ultimoResultado.texto && restante > 0);
+    salvo.textContent = salvo.hidden ? '' : ultimoResultado.texto;
+    if (!salvo.hidden) temporizadorDoSalvo = setTimeout(() => { salvo.hidden = true; }, restante);
   }
 
   // ---------- carregar
@@ -64,6 +82,7 @@ export function montarOferta(raiz, ctx) {
       estado.avisosDoPerfil = resposta.avisos || [];
       estado.original = rascunhoDoPerfil(resposta.perfil);
       estado.rascunho = pendente && !mudou(pendente.original, estado.original) ? pendente.rascunho : copiar(estado.original);
+      if (!(recado && recado.etapa) && estado.errosDoPerfil.length) estado.etapa = etapaDoErro(estado.errosDoPerfil[0]);
       estado.carregando = false;
     } catch (erro) {
       if (!(erro instanceof ErroApi)) throw erro;
@@ -81,8 +100,8 @@ export function montarOferta(raiz, ctx) {
   }
 
   function aoMudar() {
-    estado.resultado = '';
-    ultimoResultado = '';
+    ultimoResultado = { texto: '', ate: 0 };
+    mostrarTudoSalvo();
     guardar();
     for (const ouvinte of ref.ouvintes) ouvinte();
   }
@@ -148,7 +167,7 @@ export function montarOferta(raiz, ctx) {
   }
 
   function grupoDeMarcar({ id, rotulo, ajuda, itens, obter, definir }) {
-    return el('fieldset', { class: 'field grupo', 'aria-describedby': `${id}-ajuda erro-${id}` },
+    return el('fieldset', { class: 'field grupo', 'aria-describedby': `${id}-ajuda erro-${id}`, dataset: { foco: id } },
       el('legend', { class: 'label' }, rotulo),
       el('div', { class: 'chips' }, itens.map(([valor, texto]) => {
         const marcado = () => obter().includes(valor);
@@ -164,12 +183,31 @@ export function montarOferta(raiz, ctx) {
       ajuda ? el('p', { class: 'hint', id: id + '-ajuda' }, ajuda) : null);
   }
 
-  // ---------- seções
+  // ---------- etapas
 
-  function secaoSobreVoce() {
+  function painel(numero, titulo, ...conteudo) {
+    return el('section', { class: 'card painel-etapa', id: 'etapa-' + numero, hidden: numero !== estado.etapa || null, 'aria-labelledby': 'titulo-etapa-' + numero },
+      el('h2', { id: 'titulo-etapa-' + numero, tabindex: '-1' }, `Etapa ${numero} de ${ETAPAS.length}: ${titulo}`),
+      ...conteudo);
+  }
+
+  function etapa1() {
     const r = estado.rascunho;
-    return el('section', { class: 'card secao', 'aria-labelledby': 's-sobre' },
-      el('h2', { id: 's-sobre' }, 'Sobre você'),
+    const atual = restricaoParaForm(r.conformidade.restricoes);
+    const detalhe = el('input', { class: 'input', id: 'restricao-detalhe', type: 'text', maxlength: String(LIMITE_DO_TEXTO),
+      placeholder: 'Qual? Exemplo: conselho de classe', value: atual.detalhe, 'aria-label': 'Qual regra' });
+    const escolha = el('select', { class: 'select', id: 'restricao' },
+      el('option', { value: 'nao', selected: atual.resposta === 'nao' || null }, 'Não'),
+      el('option', { value: 'sim', selected: atual.resposta === 'sim' || null }, 'Sim'),
+      el('option', { value: 'nao sei', selected: atual.resposta === 'nao sei' || null }, 'Não sei'));
+    function sincronizar() {
+      detalhe.hidden = escolha.value !== 'sim';
+      r.conformidade.restricoes = restricaoParaPerfil({ resposta: escolha.value, detalhe: detalhe.value });
+    }
+    escolha.addEventListener('change', () => { sincronizar(); aoMudar(); });
+    detalhe.addEventListener('input', () => { sincronizar(); aoMudar(); });
+    detalhe.hidden = atual.resposta !== 'sim';
+    return painel(1, ETAPAS[0].nome,
       campoDeTexto({ id: 'oferta', rotulo: 'O que você vende, em uma frase', longo: true, limite: LIMITE_DA_OFERTA,
         placeholder: 'Exemplo: sites e automações com IA para negócios locais',
         obter: () => r.negocio.oferta, definir: (v) => { r.negocio.oferta = v; } }),
@@ -178,13 +216,19 @@ export function montarOferta(raiz, ctx) {
         campoDeTexto({ id: 'empresa', rotulo: 'Sua empresa (se tiver)', obter: () => r.negocio.empresa, definir: (v) => { r.negocio.empresa = v; } })),
       campoDeEscolha({ id: 'atendimento', rotulo: 'Como você atende', vazio: 'Não informado',
         opcoes: estado.opcoes.atendimentos.map((a) => [a, ROTULOS_DE_ATENDIMENTO[a] || a]),
-        obter: () => r.negocio.atendimento, definir: (v) => { r.negocio.atendimento = v; } }));
+        obter: () => r.negocio.atendimento, definir: (v) => { r.negocio.atendimento = v; } }),
+      campoDeTexto({ id: 'exemplo', rotulo: 'Seu melhor cliente até hoje (opcional)', longo: true,
+        ajuda: 'Só ajuda a lembrar quem funciona bem para você. Não muda a nota.',
+        obter: () => r.cliente.exemplo, definir: (v) => { r.cliente.exemplo = v; } }),
+      el('div', { class: 'field' },
+        el('label', { class: 'label', for: 'restricao' }, 'Sua área tem regras de publicidade ou de abordagem?'),
+        escolha, detalhe,
+        el('p', { class: 'hint' }, 'Se a resposta for sim ou não sei, a tela Leads mostra um aviso fixo. O kit não confere se uma mensagem cumpre regra nenhuma, e isto não é aconselhamento jurídico.')));
   }
 
-  function secaoCliente() {
+  function etapa2() {
     const r = estado.rascunho;
-    return el('section', { class: 'card secao', 'aria-labelledby': 's-cliente' },
-      el('h2', { id: 's-cliente' }, 'Quem você quer atender'),
+    return painel(2, ETAPAS[1].nome,
       campoDeLista({ id: 'tipos', rotulo: 'Tipos de negócio', placeholder: 'Exemplo: padaria',
         ajuda: 'Aparecem como sugestão na tela Buscar. Aperte Enter para incluir.',
         obter: () => r.cliente.tipos, definir: (v) => { r.cliente.tipos = v; } }),
@@ -193,13 +237,42 @@ export function montarOferta(raiz, ctx) {
         obter: () => r.cliente.regioes, definir: (v) => { r.cliente.regioes = v; } }),
       campoDeEscolha({ id: 'porte', rotulo: 'Tamanho do negócio que você procura', vazio: 'Não informado',
         opcoes: Object.entries(ROTULOS_DE_PORTE),
-        obter: () => r.cliente.porte, definir: (v) => { r.cliente.porte = v; } }),
-      campoDeTexto({ id: 'exemplo', rotulo: 'Seu melhor cliente até hoje (opcional)', longo: true,
-        ajuda: 'Só ajuda a lembrar quem funciona bem para você. Não muda a nota.',
-        obter: () => r.cliente.exemplo, definir: (v) => { r.cliente.exemplo = v; } }));
+        obter: () => r.cliente.porte, definir: (v) => { r.cliente.porte = v; } }));
   }
 
-  function secaoNota() {
+  // Uma regra de nota: "Quanto importa?" com quatro escolhas. Peso 4 ou 5 aparece como Personalizado.
+  function linhaDaRegra(regra) {
+    const r = estado.rascunho;
+    const nome = `peso-${regra.id}`;
+    const grupo = el('div', { class: 'seg seg-peso', role: 'radiogroup', 'aria-label': `Quanto importa: ${regra.texto}` });
+    const controles = {};
+    for (const n of NIVEIS_DE_PESO) {
+      const entrada = el('input', { type: 'radio', name: nome, id: `${nome}-${n.id}`, value: n.id });
+      entrada.addEventListener('change', () => {
+        if (!entrada.checked) return;
+        r.pontuacao.regras = definirNivel(r.pontuacao.regras, regra.id, n.id, estado.original.pontuacao.regras);
+        sincronizar();
+        aoMudar();
+      });
+      controles[n.id] = entrada;
+      grupo.append(entrada, el('label', { for: `${nome}-${n.id}` }, el('b', {}, n.rotulo)));
+    }
+    controles.personalizado = el('input', { type: 'radio', name: nome, id: `${nome}-personalizado`, value: 'personalizado' });
+    controles.textoPersonalizado = el('b', { class: 'num' }, '');
+    controles.rotuloPersonalizado = el('label', { for: `${nome}-personalizado` }, el('b', {}, 'Personalizado: '), controles.textoPersonalizado);
+    grupo.append(controles.personalizado, controles.rotuloPersonalizado);
+    // Quem decide o que fica marcado é estadoDosNiveis (função pura, testada); aqui só se aplica o resultado.
+    function sincronizar() {
+      const e = marcarNiveis(controles, estadoDosNiveis(r.pontuacao.regras, regra.id));
+      grupo.classList.toggle('com-personalizado', e.personalizado);
+    }
+    sincronizar();
+    return el('div', { class: 'regra' },
+      el('div', { class: 'regra-texto' }, el('b', {}, regra.texto.charAt(0).toUpperCase() + regra.texto.slice(1)), el('span', {}, regra.descricao)),
+      grupo);
+  }
+
+  function etapa3() {
     const r = estado.rascunho;
     const opcoes = estado.opcoes;
     const resumo = el('p', { class: 'resumo-corte', role: 'status' });
@@ -207,29 +280,6 @@ export function montarOferta(raiz, ctx) {
     const campoA = el('input', { class: 'input num-curto', id: 'corte-a', type: 'number', min: '1', step: '1', 'aria-describedby': 'erro-cortes' });
     const campoB = el('input', { class: 'input num-curto', id: 'corte-b', type: 'number', min: '0', step: '1', 'aria-describedby': 'erro-cortes' });
     const automatico = el('input', { type: 'checkbox', id: 'corte-auto', checked: (r.pontuacao.corte_a === undefined || r.pontuacao.corte_a === null) || null });
-
-    const linhas = opcoes.regras.map((regra) => {
-      const marcar = el('input', { type: 'checkbox', id: 'regra-' + regra.id, checked: r.pontuacao.regras.some((x) => x.id === regra.id) || null });
-      const peso = el('select', { class: 'select peso', id: 'peso-' + regra.id, 'aria-label': `Peso de ${regra.texto}` },
-        Array.from({ length: opcoes.peso_maximo - opcoes.peso_minimo + 1 }, (_, i) => opcoes.peso_minimo + i)
-          .map((n) => el('option', { value: String(n) }, String(n))));
-      const atual = () => r.pontuacao.regras.find((x) => x.id === regra.id);
-      peso.value = String(atual() ? atual().peso : regra.peso_padrao);
-      function sincronizar() {
-        peso.disabled = !marcar.checked;
-        const existente = atual();
-        if (marcar.checked && !existente) r.pontuacao.regras.push({ id: regra.id, peso: Number(peso.value) });
-        if (!marcar.checked && existente) r.pontuacao.regras = r.pontuacao.regras.filter((x) => x.id !== regra.id);
-        if (marcar.checked && existente) existente.peso = Number(peso.value);
-      }
-      marcar.addEventListener('change', () => { sincronizar(); aoMudar(); });
-      peso.addEventListener('change', () => { sincronizar(); aoMudar(); });
-      peso.disabled = !marcar.checked;
-      return el('div', { class: 'regra' },
-        el('label', { class: 'check', for: 'regra-' + regra.id }, marcar,
-          el('div', {}, el('b', {}, regra.texto.charAt(0).toUpperCase() + regra.texto.slice(1)), el('span', {}, regra.descricao))),
-        el('label', { class: 'peso-rotulo', for: 'peso-' + regra.id }, el('span', {}, 'Peso'), peso));
-    });
 
     function atualizarCortes() {
       const soma = somaDosPesos(r.pontuacao.regras);
@@ -239,8 +289,8 @@ export function montarOferta(raiz, ctx) {
         delete r.pontuacao.corte_a;
         delete r.pontuacao.corte_b;
         resumo.textContent = soma
-          ? `Com estas regras, o máximo é ${soma} pontos. Nota A: ${auto.a} ou mais. Nota B: ${auto.b} ou mais. Abaixo disso, nota C.`
-          : 'Marque pelo menos uma regra para os negócios receberem nota.';
+          ? `Com estas escolhas, o máximo é ${soma} pontos. Nota A: ${auto.a} ou mais. Nota B: ${auto.b} ou mais. Abaixo disso, nota C.`
+          : 'Escolha pelo menos uma coisa que importa para os negócios receberem nota.';
       } else {
         const a = Number.parseInt(campoA.value, 10);
         const b = Number.parseInt(campoB.value, 10);
@@ -267,10 +317,9 @@ export function montarOferta(raiz, ctx) {
       el('label', { class: 'peso-rotulo', for: 'corte-b' }, el('span', {}, 'Nota B a partir de'), campoB));
     atualizarCortes();
 
-    return el('section', { class: 'card secao', 'aria-labelledby': 's-nota' },
-      el('h2', { id: 's-nota' }, 'O que faz um negócio ser um bom lead'),
-      el('p', { class: 'hint' }, 'Marque o que importa para você. O peso diz quanto cada coisa vale, de 0 a 5. Os pesos iniciais são um ponto de partida: ajuste com o que você vê funcionar.'),
-      el('div', { class: 'regras' }, linhas),
+    return painel(3, ETAPAS[2].nome,
+      el('p', { class: 'hint' }, 'Diga o quanto cada coisa importa para você. O painel soma os pontos e mostra a nota A, B ou C de cada negócio. Os valores iniciais são um ponto de partida: ajuste com o que você vê funcionar.'),
+      el('div', { class: 'regras' }, opcoes.regras.map(linhaDaRegra)),
       erroDo('pesos'),
       el('div', { class: 'field cortes' },
         el('label', { class: 'check', for: 'corte-auto' }, automatico,
@@ -278,7 +327,7 @@ export function montarOferta(raiz, ctx) {
         manual, erroDo('cortes'), resumo));
   }
 
-  function secaoEvitar() {
+  function etapa4() {
     const r = estado.rascunho;
     const lista = estado.opcoes.exclusoes;
     const concorrentes = campoDeLista({ id: 'concorrentes', rotulo: 'Concorrentes a evitar', placeholder: 'Nome ou site, exemplo: Agência Tal',
@@ -293,8 +342,7 @@ export function montarOferta(raiz, ctx) {
     }
     ref.ouvintes.push(mostrar);
     mostrar();
-    return el('section', { class: 'card secao', 'aria-labelledby': 's-evitar' },
-      el('h2', { id: 's-evitar' }, 'O que você quer evitar'),
+    return painel(4, ETAPAS[3].nome,
       el('p', { class: 'hint' }, 'Quem se encaixa aqui sai da lista principal, mas não é apagado. Dá para ver em Leads, no filtro de excluídos, com o motivo.'),
       el('div', { class: 'field grupo' },
         lista.map((ex) => {
@@ -309,28 +357,10 @@ export function montarOferta(raiz, ctx) {
       concorrentes, categorias);
   }
 
-  function secaoAbordagem() {
-    const r = estado.rascunho;
-    return el('section', { class: 'card secao', 'aria-labelledby': 's-abordagem' },
-      el('h2', { id: 's-abordagem' }, 'Como você prefere abordar'),
-      grupoDeMarcar({ id: 'canais', rotulo: 'Canais', ajuda: 'O painel só escreve mensagem para WhatsApp e e-mail. O envio é sempre manual, um negócio por vez.',
-        itens: estado.opcoes.canais.map((c) => [c, ROTULOS_DE_CANAL[c] || c]),
-        obter: () => r.abordagem.canais, definir: (v) => { r.abordagem.canais = v; } }),
-      campoDeEscolha({ id: 'tom', rotulo: 'Tom das mensagens', vazio: 'Escolha',
-        opcoes: estado.opcoes.tons.map((t) => [t, ROTULOS_DE_TOM[t] || t]),
-        obter: () => r.abordagem.tom, definir: (v) => { r.abordagem.tom = v; } }),
-      campoDeTexto({ id: 'entrada', rotulo: 'Sua oferta de entrada', placeholder: 'Exemplo: diagnóstico grátis',
-        ajuda: 'O que você oferece no primeiro contato.',
-        obter: () => r.abordagem.oferta_entrada, definir: (v) => { r.abordagem.oferta_entrada = v; } }),
-      campoDeEscolha({ id: 'volume', rotulo: 'Quantos contatos você consegue fazer por semana', vazio: 'Não informado',
-        opcoes: estado.opcoes.volumes_semana.map((v) => [v.id, v.texto]),
-        obter: () => r.abordagem.volume_semana, definir: (v) => { r.abordagem.volume_semana = v; } }));
-  }
-
-  function secaoMensagens() {
+  function mensagens() {
     const r = estado.rascunho;
     const opcoes = estado.opcoes;
-    const corpo = el('div', {});
+    const corpo = el('div', { class: 'mensagens' });
     function canaisVisiveis() {
       return CANAIS_COM_MODELO.filter((c) => r.abordagem.canais.includes(c) || r.mensagens[c]);
     }
@@ -382,7 +412,7 @@ export function montarOferta(raiz, ctx) {
       limpar(corpo);
       const canais = canaisVisiveis();
       corpo.append(...(canais.length ? canais.map(modelo)
-        : [el('p', { class: 'hint' }, 'Escolha WhatsApp ou e-mail em "Como você prefere abordar" para escrever uma mensagem.')]));
+        : [el('p', { class: 'hint' }, 'Escolha WhatsApp ou e-mail em "Canais" para escrever uma mensagem.')]));
     }
     let ultimos = '';
     ref.ouvintes.push(() => {
@@ -391,52 +421,126 @@ export function montarOferta(raiz, ctx) {
     });
     ultimos = canaisVisiveis().join();
     desenharCorpo();
-    return el('section', { class: 'card secao', 'aria-labelledby': 's-mensagens' },
-      el('h2', { id: 's-mensagens' }, 'Mensagens de abordagem'),
+    return el('div', { class: 'bloco-mensagens' },
+      el('h3', {}, 'Mensagens de abordagem'),
       el('p', { class: 'hint' }, 'Toda mensagem precisa dar uma saída clara, por exemplo "se não fizer sentido, é só avisar que não escrevo mais". O painel confere isso ao salvar. A mensagem de cada negócio pode ser editada na tela Leads.'),
       corpo);
   }
 
-  function secaoConformidade() {
+  function etapa5() {
     const r = estado.rascunho;
-    const atual = restricaoParaForm(r.conformidade.restricoes);
-    const detalhe = el('input', { class: 'input', id: 'restricao-detalhe', type: 'text', maxlength: String(LIMITE_DO_TEXTO),
-      placeholder: 'Qual? Exemplo: conselho de classe', value: atual.detalhe, 'aria-label': 'Qual regra' });
-    const escolha = el('select', { class: 'select', id: 'restricao' },
-      el('option', { value: 'nao', selected: atual.resposta === 'nao' || null }, 'Não'),
-      el('option', { value: 'sim', selected: atual.resposta === 'sim' || null }, 'Sim'),
-      el('option', { value: 'nao sei', selected: atual.resposta === 'nao sei' || null }, 'Não sei'));
-    function sincronizar() {
-      detalhe.hidden = escolha.value !== 'sim';
-      r.conformidade.restricoes = restricaoParaPerfil({ resposta: escolha.value, detalhe: detalhe.value });
+    return painel(5, ETAPAS[4].nome,
+      grupoDeMarcar({ id: 'canais', rotulo: 'Canais', ajuda: 'O painel só escreve mensagem para WhatsApp e e-mail. O envio é sempre manual, um negócio por vez.',
+        itens: estado.opcoes.canais.map((c) => [c, ROTULOS_DE_CANAL[c] || c]),
+        obter: () => r.abordagem.canais, definir: (v) => { r.abordagem.canais = v; } }),
+      campoDeEscolha({ id: 'tom', rotulo: 'Tom das mensagens', vazio: 'Escolha',
+        opcoes: estado.opcoes.tons.map((t) => [t, ROTULOS_DE_TOM[t] || t]),
+        obter: () => r.abordagem.tom, definir: (v) => { r.abordagem.tom = v; } }),
+      campoDeTexto({ id: 'entrada', rotulo: 'Sua oferta de entrada', placeholder: 'Exemplo: diagnóstico grátis',
+        ajuda: 'O que você oferece no primeiro contato.',
+        obter: () => r.abordagem.oferta_entrada, definir: (v) => { r.abordagem.oferta_entrada = v; } }),
+      campoDeEscolha({ id: 'volume', rotulo: 'Quantos contatos você consegue fazer por semana', vazio: 'Não informado',
+        opcoes: estado.opcoes.volumes_semana.map((v) => [v.id, v.texto]),
+        obter: () => r.abordagem.volume_semana, definir: (v) => { r.abordagem.volume_semana = v; } }),
+      mensagens());
+  }
+
+  // ---------- navegação entre etapas
+
+  const botoesDeEtapa = [];
+
+  function irParaEtapa(numero, { focar = true } = {}) {
+    estado.etapa = numero;
+    ultimaEtapa = numero;
+    ETAPAS.forEach((e) => {
+      const painelDaEtapa = area.querySelector('#etapa-' + e.id);
+      if (painelDaEtapa) painelDaEtapa.hidden = e.id !== numero;
+    });
+    atualizarEtapas();
+    if (focar) {
+      const titulo = area.querySelector(`#titulo-etapa-${numero}`);
+      if (titulo) { titulo.focus(); titulo.scrollIntoView({ block: 'start' }); }
+      anunciar(`Etapa ${numero} de ${ETAPAS.length}: ${ETAPAS[numero - 1].nome}`);
     }
-    escolha.addEventListener('change', () => { sincronizar(); aoMudar(); });
-    detalhe.addEventListener('input', () => { sincronizar(); aoMudar(); });
-    detalhe.hidden = atual.resposta !== 'sim';
-    return el('section', { class: 'card secao', 'aria-labelledby': 's-conf' },
-      el('h2', { id: 's-conf' }, 'Regras da sua área'),
-      el('div', { class: 'field' },
-        el('label', { class: 'label', for: 'restricao' }, 'Sua área tem regras de publicidade ou de abordagem?'),
-        escolha, detalhe,
-        el('p', { class: 'hint' }, 'Se a resposta for sim ou não sei, a tela Leads mostra um aviso fixo. O kit não confere se uma mensagem cumpre regra nenhuma, e isto não é aconselhamento jurídico.')));
+  }
+
+  function etapasComProblema() {
+    const set = new Set();
+    for (const e of estado.erros) set.add(etapaDoCampo(e.campo));
+    for (const m of [...estado.errosDoServidor, ...estado.errosDoPerfil]) set.add(etapaDoErro(m));
+    return set;
+  }
+
+  function atualizarEtapas() {
+    const problemas = etapasComProblema();
+    botoesDeEtapa.forEach((b, i) => {
+      const numero = i + 1;
+      const atual = numero === estado.etapa;
+      if (atual) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+      b.classList.toggle('com-problema', problemas.has(numero));
+      b.querySelector('.problema').hidden = !problemas.has(numero);
+    });
+    if (ref.voltar) ref.voltar.hidden = estado.etapa === 1;
+    if (ref.continuar) ref.continuar.hidden = estado.etapa === ETAPAS.length;
+    if (ref.salvarFim) ref.salvarFim.hidden = estado.etapa !== ETAPAS.length;
+  }
+
+  function nav() {
+    botoesDeEtapa.length = 0;
+    return el('nav', { class: 'etapas', 'aria-label': 'Etapas do perfil' },
+      el('ol', {}, ETAPAS.map((e) => {
+        const b = el('button', { class: 'etapa', type: 'button', onClick: () => irParaEtapa(e.id) },
+          el('span', { class: 'n', 'aria-hidden': 'true' }, String(e.id)),
+          el('span', { class: 'nome' }, e.nome),
+          el('span', { class: 'problema', hidden: true }, el('span', { 'aria-hidden': 'true' }, '!'), el('span', { class: 'so-leitor' }, ' (tem um problema)')));
+        botoesDeEtapa.push(b);
+        return el('li', {}, b);
+      })));
   }
 
   // ---------- salvar
 
   const barra = {
+    no: el('div', { class: 'barra-salvar', role: 'region', 'aria-label': 'Salvar o perfil', hidden: true }),
     texto: el('span', { class: 'barra-texto' }),
     salvar: el('button', { class: 'btn btn-primary', type: 'submit', form: 'form-oferta' }, 'Salvar e dar nota de novo'),
-    descartar: el('button', { class: 'btn', type: 'button' }, 'Descartar mudanças'),
+    descartar: el('button', { class: 'btn btn-small btn-quieto', type: 'button' }, 'Descartar mudanças'),
   };
+  barra.no.append(barra.texto, barra.descartar, barra.salvar);
+
+  function temAlerta() {
+    return estado.erros.length > 0 || estado.errosDoServidor.length > 0;
+  }
 
   function atualizarBarra() {
     const alterado = sujo();
+    barra.no.hidden = !(alterado || estado.salvando);
+    barra.no.classList.toggle('alerta', temAlerta());
     barra.salvar.disabled = estado.salvando || !alterado;
     barra.descartar.disabled = estado.salvando || !alterado;
     barra.salvar.textContent = estado.salvando ? 'Salvando...' : 'Salvar e dar nota de novo';
     barra.texto.textContent = estado.salvando ? 'Salvando e dando nota de novo...'
-      : alterado ? 'Você tem mudanças que ainda não foram salvas.' : (estado.resultado || 'Tudo salvo.');
+      : temAlerta() ? 'Não foi salvo. Veja os avisos no alto da página.' : 'Mudanças ainda não salvas.';
+    if (ref.salvarFim) ref.salvarFim.disabled = estado.salvando || !alterado;
+    if (temAlerta() || !alterado) barra.no.classList.remove('recolhida');
   }
+
+  // No celular a barra sai da frente ao rolar para baixo e volta ao rolar para cima. Ela só se desloca (nunca some do
+  // documento), então um botão dela que receba foco já a traz de volta. Erro ou falha ao salvar a mantêm à vista.
+  let ultimoY = window.scrollY || 0;
+  const aoRolar = () => {
+    const y = window.scrollY || 0;
+    const celular = window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
+    if (celular && !temAlerta() && !barra.no.contains(document.activeElement)) {
+      if (y > ultimoY + 6 && y > 80) barra.no.classList.add('recolhida');
+      else if (y < ultimoY - 6 || y <= 80) barra.no.classList.remove('recolhida');
+    } else {
+      barra.no.classList.remove('recolhida');
+    }
+    ultimoY = y;
+  };
+  window.addEventListener('scroll', aoRolar, { passive: true });
+  barra.no.addEventListener('focusin', () => barra.no.classList.remove('recolhida'));
 
   function mostrarErros() {
     const porCampo = new Map();
@@ -447,18 +551,33 @@ export function montarOferta(raiz, ctx) {
       no.textContent = mensagem || '';
     }
     for (const no of area.querySelectorAll('[aria-describedby]')) {
-      const campo = no.id;
-      if (campo) no.setAttribute('aria-invalid', porCampo.has(campo) ? 'true' : 'false');
+      if (no.id) no.setAttribute('aria-invalid', porCampo.has(no.id) ? 'true' : 'false');
     }
+  }
+
+  function focoDoCampo(campo) {
+    const direto = area.querySelector('#' + CSS.escape(campo));
+    if (direto && direto.focus) return direto;
+    if (campo === 'pesos') return area.querySelector('.seg-peso input:checked');
+    if (campo === 'cortes') return area.querySelector('#corte-auto');
+    return area.querySelector(`[data-foco="${campo}"] button`);
   }
 
   function desenharResumoDeErros() {
     limpar(ref.erros);
-    const mensagens = [...estado.erros.map((e) => e.mensagem), ...estado.errosDoServidor];
-    ref.erros.hidden = !mensagens.length;
-    if (!mensagens.length) return;
+    const itens = [
+      ...estado.erros.map((e) => ({ mensagem: e.mensagem, etapa: etapaDoCampo(e.campo), campo: e.campo })),
+      ...estado.errosDoServidor.map((m) => ({ mensagem: m, etapa: etapaDoErro(m) })),
+    ];
+    ref.erros.hidden = !itens.length;
+    if (!itens.length) return;
     ref.erros.append(el('b', {}, 'O perfil não foi salvo. Corrija estes pontos:'),
-      el('ul', { class: 'lista-erros' }, mensagens.map((m) => el('li', {}, m))));
+      el('ul', { class: 'lista-erros' }, itens.map((i) => el('li', {}, i.mensagem + ' ',
+        el('button', { class: 'btn btn-small', type: 'button', onClick: () => {
+          irParaEtapa(i.etapa, { focar: false });
+          const alvo = i.campo ? focoDoCampo(i.campo) : null;
+          if (alvo) alvo.focus(); else area.querySelector(`#titulo-etapa-${i.etapa}`).focus();
+        } }, `Ver na etapa ${i.etapa}`)))));
   }
 
   async function salvar() {
@@ -467,7 +586,10 @@ export function montarOferta(raiz, ctx) {
     estado.erros = conferirRascunho(estado.rascunho, estado.opcoes);
     mostrarErros();
     desenharResumoDeErros();
+    atualizarEtapas();
+    atualizarBarra();
     if (estado.erros.length) {
+      irParaEtapa(etapaDoCampo(estado.erros[0].campo), { focar: false });
       anunciar('O perfil não foi salvo. Corrija os pontos indicados.');
       ref.erros.focus();
       ref.erros.scrollIntoView({ block: 'center' });
@@ -476,21 +598,20 @@ export function montarOferta(raiz, ctx) {
     estado.salvando = true;
     atualizarBarra();
     try {
-      const gravado = await escrever('PUT', '/api/perfil', perfilParaSalvar(estado.rascunho, estado.opcoes));
+      const gravado = await escrever('PUT', '/api/perfil', perfilParaSalvar(estado.rascunho, estado.opcoes, estado.original));
       estado.original = rascunhoDoPerfil(gravado.perfil);
       estado.rascunho = copiar(estado.original);
       estado.errosDoPerfil = [];
       estado.avisosDoPerfil = gravado.avisos || [];
       pendente = null;
-      let texto = 'Perfil salvo.';
+      let texto = 'Tudo salvo.';
       try {
-        texto = resumoDaReavaliacao(await escrever('POST', '/api/leads/reavaliar'));
+        texto = 'Tudo salvo. ' + resumoDaReavaliacao(await escrever('POST', '/api/leads/reavaliar')).replace(/^Perfil salvo\.\s*/, '');
       } catch (erro) {
         if (!(erro instanceof ErroApi)) throw erro;
-        texto = 'Perfil salvo, mas não consegui dar nota de novo aos leads: ' + erro.message + ' Salve de novo para tentar.';
+        texto = 'O perfil foi salvo, mas não consegui dar nota de novo aos leads: ' + erro.message + ' Salve de novo para tentar.';
       }
-      estado.resultado = texto;
-      ultimoResultado = texto;
+      ultimoResultado = { texto, ate: Date.now() + DURACAO_DO_TUDO_SALVO_MS };
       estado.salvando = false;
       desenhar();  // volta a mostrar o que o servidor guardou, que pode ter ajustes
       anunciar(texto);
@@ -501,7 +622,9 @@ export function montarOferta(raiz, ctx) {
       estado.salvando = false;
       estado.errosDoServidor = erro.erros && erro.erros.length ? erro.erros : [erro.message];
       desenharResumoDeErros();
+      atualizarEtapas();
       atualizarBarra();
+      barra.no.classList.remove('recolhida');
       anunciar('O perfil não foi salvo.');
       ref.erros.focus();
       ref.erros.scrollIntoView({ block: 'center' });
@@ -513,8 +636,9 @@ export function montarOferta(raiz, ctx) {
   function desenhar() {
     ref.ouvintes = [];
     limpar(area);
-    if (estado.carregando) { area.append(blocoCarregando('Carregando o seu perfil...')); return; }
+    if (estado.carregando) { area.append(blocoCarregando('Carregando o seu perfil...')); barra.no.hidden = true; return; }
     if (estado.erro) {
+      barra.no.hidden = true;
       area.append(blocoEstado({
         tipo: 'bad', selo: '!', titulo: 'Não consegui abrir o seu perfil', texto: estado.erro.message,
         acoes: [{ rotulo: 'Tentar de novo', primario: true, aoClicar: carregar }],
@@ -536,25 +660,35 @@ export function montarOferta(raiz, ctx) {
       desenhar();
       anunciar('As mudanças foram descartadas.');
     };
+    ref.voltar = el('button', { class: 'btn', type: 'button', onClick: () => irParaEtapa(estado.etapa - 1) }, 'Voltar');
+    ref.continuar = el('button', { class: 'btn btn-primary', type: 'button', onClick: () => irParaEtapa(estado.etapa + 1) }, 'Continuar');
+    ref.salvarFim = el('button', { class: 'btn btn-primary', type: 'submit', form: 'form-oferta' }, 'Salvar e dar nota de novo');
     const formulario = el('form', { class: 'form-oferta', id: 'form-oferta', novalidate: true,
-      onSubmit: (evento) => { evento.preventDefault(); salvar(); } },
-      ref.avisosDoPerfil, ref.erros,
-      secaoSobreVoce(), secaoCliente(), secaoNota(), secaoEvitar(), secaoAbordagem(), secaoMensagens(), secaoConformidade(),
-      el('p', { class: 'hint' }, TEXTO_SEM_IA),
-      el('div', { class: 'barra-salvar' }, barra.texto, el('p', { class: 'hint barra-dica' }, TEXTO_SALVAR),
-        el('div', { class: 'acoes' }, barra.descartar, barra.salvar)));
+      onSubmit: (evento) => { evento.preventDefault(); salvar(); },
+      // Enter em um campo de texto não salva sem querer
+      onKeydown: (evento) => { if (evento.key === 'Enter' && evento.target.tagName === 'INPUT' && evento.target.type === 'text') evento.preventDefault(); } },
+      ref.avisosDoPerfil, ref.erros, nav(),
+      etapa1(), etapa2(), etapa3(), etapa4(), etapa5(),
+      el('div', { class: 'rodape-etapa' }, ref.voltar, el('span', { class: 'espaco' }), ref.continuar, ref.salvarFim),
+      el('p', { class: 'hint' }, TEXTO_SEM_IA));
     ref.ouvintes.push(atualizarBarra);
     area.append(formulario);
     mostrarErros();
     desenharResumoDeErros();
+    atualizarEtapas();
     atualizarBarra();
+    mostrarTudoSalvo();
   }
 
+  raiz.append(barra.no);
   carregar();
 
   return () => {
     vivo = false;
+    clearTimeout(temporizadorDoSalvo);
     window.removeEventListener('beforeunload', avisoDeSaida);
+    window.removeEventListener('scroll', aoRolar);
+    barra.no.remove();
     guardar();
   };
 }

@@ -1226,6 +1226,32 @@ class TestFiltrosRapidosNaApi(Base):
         self.assertEqual(linhas, self.lista("&sem_site=1&celular=1")["total"])
 
 
+class TestSalvarPerfilSemMudar(Base):
+    """A tela so envia o perfil quando algo muda, mas o servidor tambem nao pode alterar o que recebe igual."""
+
+    def lido(self):
+        return (self.dados / "perfil.json").read_text(encoding="utf-8")
+
+    def test_gravar_o_mesmo_perfil_duas_vezes_deixa_o_arquivo_igual(self):
+        perfil = self.ler("/api/perfil").json["perfil"]
+        self.assertEqual(self.escrever("PUT", "/api/perfil", perfil).status, 200)
+        primeiro = self.lido()
+        perfil2 = self.ler("/api/perfil").json["perfil"]
+        self.assertEqual(self.escrever("PUT", "/api/perfil", perfil2).status, 200)
+        self.assertEqual(self.lido(), primeiro)
+        self.assertEqual(json.loads(primeiro), perfil)
+
+    def test_pesos_4_e_5_e_a_ordem_das_regras_sobrevivem_a_um_salvamento(self):
+        perfil = perfil_ficticio()
+        perfil["pontuacao"]["regras"] = [{"id": "celular", "peso": 4}, {"id": "sem_site", "peso": 5}, {"id": "nota_alta", "peso": 0}]
+        self.assertEqual(self.escrever("PUT", "/api/perfil", perfil).status, 200)
+        perfil["negocio"]["oferta"] = "Mudei so a oferta"
+        self.assertEqual(self.escrever("PUT", "/api/perfil", perfil).status, 200)
+        salvo = self.ler("/api/perfil").json["perfil"]
+        self.assertEqual(salvo["pontuacao"]["regras"], [{"id": "celular", "peso": 4}, {"id": "sem_site", "peso": 5}, {"id": "nota_alta", "peso": 0}])
+        self.assertEqual(salvo["negocio"]["oferta"], "Mudei so a oferta")
+
+
 class TestExportacaoComExcluidos(Base):
     def linhas_csv(self, params):
         r = self.ler("/api/exportar?formato=csv" + params, token=TOKEN)

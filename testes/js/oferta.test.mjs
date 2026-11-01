@@ -139,3 +139,157 @@ test('resumo ao salvar: singular, plural e sem leads', () => {
   assert.match(u.resumoDaReavaliacao({ leads: 262, por_letra: { A: 10, B: 50, C: 202 } }), /262 leads receberam nota de novo: 10 A, 50 B e 202 C/);
   assert.match(u.resumoDaReavaliacao({ leads: 0, por_letra: {} }), /Ainda não há leads/);
 });
+
+// ---------- etapa 2: importância, etapas e ordem das regras
+
+test('importância: Ignorar 0, Pouco 1, Importa 2, Muito 3; 4 e 5 viram Personalizado sem perder o valor', () => {
+  assert.deepEqual(u.NIVEIS_DE_PESO.map((n) => [n.id, n.peso]), [['ignorar', 0], ['pouco', 1], ['importa', 2], ['muito', 3]]);
+  for (const [peso, nivel] of [[0, 'ignorar'], [1, 'pouco'], [2, 'importa'], [3, 'muito'], [4, 'personalizado'], [5, 'personalizado']]) {
+    assert.equal(u.nivelDoPeso(peso), nivel, String(peso));
+  }
+  const regras = [{ id: 'sem_site', peso: 5 }, { id: 'celular', peso: 2 }];
+  assert.equal(u.pesoDaRegra(regras, 'sem_site'), 5);
+  assert.equal(u.pesoDaRegra(regras, 'delivery'), 0);  // ausente conta como Ignorar
+  const mexido = u.definirNivel(regras, 'celular', 'muito', regras);
+  assert.deepEqual(mexido, [{ id: 'sem_site', peso: 5 }, { id: 'celular', peso: 3 }]);  // o 5 continua 5
+  assert.deepEqual(regras, [{ id: 'sem_site', peso: 5 }, { id: 'celular', peso: 2 }]);  // a lista de entrada não muda
+});
+
+test('importância: os pesos padrão do kit (1, 2 e 3) viram nível e voltam com o mesmo valor', () => {
+  for (const padrao of [1, 2, 3]) {
+    const nivel = u.nivelDoPeso(padrao);
+    assert.notEqual(nivel, 'personalizado');
+    const depois = u.definirNivel([], 'sem_site', nivel, []);
+    assert.equal(u.pesoDaRegra(depois, 'sem_site'), padrao);
+  }
+});
+
+test('importância: Ignorar tira a regra, mas respeita um peso 0 que já estava no perfil', () => {
+  const original = [{ id: 'a', peso: 0 }, { id: 'b', peso: 2 }];
+  assert.deepEqual(u.definirNivel(original, 'b', 'ignorar', original), [{ id: 'a', peso: 0 }]);
+  assert.deepEqual(u.definirNivel([{ id: 'b', peso: 2 }], 'a', 'muito', original), [{ id: 'b', peso: 2 }, { id: 'a', peso: 3 }]);
+  assert.deepEqual(u.definirNivel([{ id: 'b', peso: 2 }, { id: 'a', peso: 3 }], 'a', 'ignorar', original), [{ id: 'b', peso: 2 }, { id: 'a', peso: 0 }]);
+  assert.deepEqual(u.definirNivel([], 'x', 'ignorar', original), []);  // ligar e desligar não deixa rastro
+  assert.equal(u.definirNivel(original, 'a', 'nao-existe', original), original);
+});
+
+test('ordem das regras: as que já estavam no perfil não mudam de lugar ao salvar', () => {
+  const p = perfilBase();
+  p.pontuacao.regras = [{ id: 'celular', peso: 4 }, { id: 'sem_site', peso: 5 }];
+  const original = u.rascunhoDoPerfil(p);
+  const r = u.copiar(original);
+  r.negocio.oferta = 'Outra frase';
+  const salvo = u.perfilParaSalvar(r, OPCOES, original);
+  assert.deepEqual(salvo.pontuacao.regras, [{ id: 'celular', peso: 4 }, { id: 'sem_site', peso: 5 }]);  // ordem e pesos 4 e 5 intactos
+  r.pontuacao.regras = u.definirNivel(r.pontuacao.regras, 'nota_alta', 'importa', original.pontuacao.regras);
+  r.pontuacao.regras = u.definirNivel(r.pontuacao.regras, 'so_instagram', 'pouco', original.pontuacao.regras);
+  const novo = u.perfilParaSalvar(r, OPCOES, original);
+  assert.deepEqual(novo.pontuacao.regras.map((x) => x.id), ['celular', 'sem_site', 'so_instagram', 'nota_alta']);  // novas depois, na ordem do kit
+});
+
+test('sem mexer em nada, o rascunho é igual ao original (a barra de salvar não aparece)', () => {
+  const original = u.rascunhoDoPerfil(perfilBase());
+  assert.equal(u.mudou(u.copiar(original), original), false);
+  const r = u.copiar(original);
+  r.pontuacao.regras = u.definirNivel(r.pontuacao.regras, 'sem_site', 'muito', original.pontuacao.regras);  // já era 3
+  assert.equal(u.mudou(r, original), false);
+});
+
+test('etapas: cada campo tem a sua, e o erro do servidor leva à etapa certa', () => {
+  assert.deepEqual(u.ETAPAS.map((e) => e.nome), ['Sobre você', 'Quem atender', 'O que importa', 'O que evitar', 'Como falar']);
+  for (const [campo, etapa] of [['oferta', 1], ['regioes', 2], ['porte', 2], ['pesos', 3], ['cortes', 3], ['concorrentes', 4], ['canais', 5], ['mensagem-whatsapp', 5], ['volume', 5]]) {
+    assert.equal(u.etapaDoCampo(campo), etapa, campo);
+  }
+  const casos = [
+    ['Falta preencher: o que você vende (negocio.oferta).', 1],
+    ['Falta preencher: os tipos de negócio que você quer atender (cliente.tipos).', 2],
+    ['Falta preencher: onde você atende (cliente.regioes).', 2],
+    ['O porte do cliente precisa ser: pequeno, medio.', 2],
+    ['Falta preencher: como você prefere abordar (abordagem.canais).', 5],
+    ['O tom precisa ser: amigavel, direto, formal.', 5],
+    ['A mensagem de WhatsApp usa o marcador inválido {apelido}.', 5],
+    ['A mensagem de e-mail precisa de uma saída clara.', 5],
+    ['Os cortes A e B estavam errados.', 3],
+    ['Versão do perfil desconhecida (2). Refaça a entrevista.', 1],
+    [undefined, 1],
+  ];
+  for (const [msg, etapa] of casos) assert.equal(u.etapaDoErro(msg), etapa, String(msg));
+});
+
+// ---------- qual nível fica marcado (função pura que a tela só obedece)
+
+import { readFileSync } from 'node:fs';
+const REGRAS_DO_KIT = JSON.parse(readFileSync(new URL('../../kit/regras.json', import.meta.url), 'utf-8'));
+
+const controlesFalsos = () => ({
+  ignorar: {}, pouco: {}, importa: {}, muito: {},
+  personalizado: { hidden: true }, rotuloPersonalizado: { hidden: true }, textoPersonalizado: { textContent: '' },
+});
+const marcados = (c) => ['ignorar', 'pouco', 'importa', 'muito', 'personalizado'].filter((n) => c[n].checked);
+
+test('nível marcado: cada peso de 0 a 5 devolve o nível certo', () => {
+  const esperado = { 0: 'ignorar', 1: 'pouco', 2: 'importa', 3: 'muito', 4: 'personalizado', 5: 'personalizado' };
+  for (const [peso, nivel] of Object.entries(esperado)) {
+    const e = u.estadoDosNiveis([{ id: 'sem_site', peso: Number(peso) }], 'sem_site');
+    assert.equal(e.marcado, nivel, `peso ${peso}`);
+    assert.equal(e.personalizado, nivel === 'personalizado');
+    assert.equal(e.rotuloPersonalizado, nivel === 'personalizado' ? String(peso) : '');
+    assert.equal(e.peso, Number(peso));
+  }
+});
+
+test('nível marcado: todos os pesos padrão do kit caem em Pouco, Importa ou Muito', () => {
+  const regras = Object.entries(REGRAS_DO_KIT.regras);
+  assert.equal(regras.length, 10);
+  for (const [id, cfg] of regras) {
+    const e = u.estadoDosNiveis([{ id, peso: cfg.peso }], id);
+    assert.ok(['pouco', 'importa', 'muito'].includes(e.marcado), `${id} peso ${cfg.peso} caiu em ${e.marcado}`);
+    assert.equal(e.personalizado, false, id);
+    assert.equal(u.NIVEIS_DE_PESO.find((n) => n.id === e.marcado).peso, cfg.peso, id);  // volta ao mesmo peso
+  }
+});
+
+test('nível marcado: regra ausente do perfil devolve Ignorar (e lista vazia também)', () => {
+  assert.equal(u.estadoDosNiveis([{ id: 'celular', peso: 2 }], 'delivery').marcado, 'ignorar');
+  assert.equal(u.estadoDosNiveis([], 'delivery').marcado, 'ignorar');
+  assert.equal(u.estadoDosNiveis([], 'delivery').personalizado, false);
+});
+
+test('botões: sempre exatamente um marcado e o Personalizado só aparece com peso 4 ou 5', () => {
+  for (let peso = 0; peso <= 5; peso += 1) {
+    const c = controlesFalsos();
+    // começa de um estado sujo, como o de um botão que a pessoa clicou antes
+    for (const n of ['ignorar', 'pouco', 'importa', 'muito', 'personalizado']) c[n].checked = true;
+    u.marcarNiveis(c, u.estadoDosNiveis([{ id: 'x', peso }], 'x'));
+    assert.equal(marcados(c).length, 1, `peso ${peso}`);
+    assert.equal(marcados(c)[0], u.nivelDoPeso(peso));
+    const custom = peso >= 4;
+    assert.equal(c.personalizado.hidden, !custom);
+    assert.equal(c.rotuloPersonalizado.hidden, !custom);
+    assert.equal(c.textoPersonalizado.textContent, custom ? String(peso) : '');
+  }
+  const c = controlesFalsos();
+  u.marcarNiveis(c, u.estadoDosNiveis([], 'x'));
+  assert.deepEqual(marcados(c), ['ignorar']);  // regra ausente
+});
+
+test('abrir a tela e salvar sem mexer não muda nenhum peso, nem a ordem', () => {
+  const perfis = [
+    [{ id: 'sem_site', peso: 3 }, { id: 'so_instagram', peso: 2 }, { id: 'nota_alta', peso: 2 }, { id: 'muitas_avaliacoes', peso: 1 }, { id: 'celular', peso: 2 }],
+    [{ id: 'celular', peso: 4 }, { id: 'sem_site', peso: 5 }, { id: 'nota_alta', peso: 0 }, { id: 'reserva', peso: 1 }],
+    [],
+    Object.entries(REGRAS_DO_KIT.regras).map(([id, cfg]) => ({ id, peso: cfg.peso })).reverse(),
+  ];
+  const opcoes = { ...OPCOES, regras: Object.keys(REGRAS_DO_KIT.regras).map((id) => ({ id })) };
+  for (const regras of perfis) {
+    const p = perfilBase();
+    p.pontuacao.regras = regras.map((r) => ({ ...r }));
+    const original = u.rascunhoDoPerfil(p);
+    const aberto = u.copiar(original);
+    // a tela mostra cada regra com estadoDosNiveis; olhar não altera nada
+    for (const { id } of opcoes.regras) u.estadoDosNiveis(aberto.pontuacao.regras, id);
+    assert.equal(u.mudou(aberto, original), false);  // a barra de salvar nem aparece
+    const salvo = u.perfilParaSalvar(aberto, opcoes, original);
+    assert.deepEqual(salvo.pontuacao.regras, regras);  // mesmos pesos, mesma ordem
+  }
+});

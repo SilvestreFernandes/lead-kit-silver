@@ -87,6 +87,104 @@ export function restricaoParaPerfil({ resposta, detalhe }) {
   return resposta === 'nao sei' ? 'nao sei' : 'nao';
 }
 
+// ---------- importância de cada regra: Ignorar, Pouco, Importa, Muito (o esquema aceita de 0 a 5)
+
+export const NIVEIS_DE_PESO = [
+  { id: 'ignorar', rotulo: 'Ignorar', peso: 0 },
+  { id: 'pouco', rotulo: 'Pouco', peso: 1 },
+  { id: 'importa', rotulo: 'Importa', peso: 2 },
+  { id: 'muito', rotulo: 'Muito', peso: 3 },
+];
+
+// Peso 4 ou 5 (feito à mão no arquivo ou pela IA) não tem nome: aparece como "Personalizado" e o valor não se perde.
+export function nivelDoPeso(peso) {
+  const n = NIVEIS_DE_PESO.find((x) => x.peso === peso);
+  return n ? n.id : 'personalizado';
+}
+
+// Qual botão fica marcado em uma regra, e se aparece o "Personalizado". Decisão pura: a tela só obedece.
+// `marcado` é um de ignorar, pouco, importa, muito ou personalizado. Peso 4 ou 5 mostra "Personalizado: N".
+export function estadoDosNiveis(regras, id) {
+  const peso = pesoDaRegra(regras, id);
+  const marcado = nivelDoPeso(peso);
+  const personalizado = marcado === 'personalizado';
+  return { peso, marcado, personalizado, rotuloPersonalizado: personalizado ? String(peso) : '' };
+}
+
+// Aplica o estado acima aos botões da regra. `controles` tem um objeto por nível (ignorar, pouco, importa, muito, personalizado)
+// com `checked` e `hidden`, e `textoPersonalizado` com `textContent`. Cada botão recebe um valor explícito, para
+// nunca sobrar mais de um marcado nem nenhum.
+export function marcarNiveis(controles, estado) {
+  for (const n of NIVEIS_DE_PESO) controles[n.id].checked = estado.marcado === n.id;
+  controles.personalizado.checked = estado.personalizado;
+  controles.personalizado.hidden = !estado.personalizado;
+  controles.rotuloPersonalizado.hidden = !estado.personalizado;
+  controles.textoPersonalizado.textContent = estado.rotuloPersonalizado;
+  return estado;
+}
+
+// Regra que não está no perfil conta como peso 0: dá exatamente a mesma nota (testado no kit).
+export function pesoDaRegra(regras, id) {
+  const r = regras.find((x) => x.id === id);
+  return r ? r.peso : 0;
+}
+
+// Devolve a lista de regras com o nível novo. Só a regra mexida muda; as outras ficam como estavam.
+// "Ignorar" tira a regra da lista, a não ser que o perfil original já a guardasse com peso 0.
+export function definirNivel(regras, id, nivel, original = []) {
+  const n = NIVEIS_DE_PESO.find((x) => x.id === nivel);
+  if (!n) return regras;
+  const existe = regras.some((r) => r.id === id);
+  if (n.peso === 0) {
+    const eraZero = original.some((r) => r.id === id && r.peso === 0);
+    if (eraZero) return existe ? regras.map((r) => (r.id === id ? { ...r, peso: 0 } : r)) : [...regras, { id, peso: 0 }];
+    return regras.filter((r) => r.id !== id);
+  }
+  return existe ? regras.map((r) => (r.id === id ? { ...r, peso: n.peso } : r)) : [...regras, { id, peso: n.peso }];
+}
+
+// ---------- etapas da tela
+
+export const ETAPAS = [
+  { id: 1, nome: 'Sobre você' },
+  { id: 2, nome: 'Quem atender' },
+  { id: 3, nome: 'O que importa' },
+  { id: 4, nome: 'O que evitar' },
+  { id: 5, nome: 'Como falar' },
+];
+
+const ETAPA_DO_CAMPO = {
+  oferta: 1, nome: 1, empresa: 1, atendimento: 1, exemplo: 1, restricao: 1,
+  tipos: 2, regioes: 2, porte: 2,
+  pesos: 3, cortes: 3,
+  concorrentes: 4, categorias: 4,
+  canais: 5, tom: 5, entrada: 5, volume: 5,
+};
+
+export function etapaDoCampo(campo) {
+  if (String(campo).startsWith('mensagem-')) return 5;
+  return ETAPA_DO_CAMPO[campo] || 1;
+}
+
+// Em qual etapa mexer para resolver um problema que o servidor descreveu em português.
+export function etapaDoErro(mensagem) {
+  const m = String(mensagem || '');
+  const caminho = /\(([a-z_]+(?:\.[a-z_]+)*)\)/.exec(m);
+  if (caminho) {
+    const c = caminho[1];
+    if (c.startsWith('negocio') || c.startsWith('conformidade')) return 1;
+    if (c.startsWith('cliente')) return 2;
+    if (c.startsWith('pontuacao')) return 3;
+    if (c.startsWith('exclusoes')) return 4;
+    if (c.startsWith('abordagem') || c.startsWith('mensagens')) return 5;
+  }
+  if (/mensagem de|marcador|saída clara|canal desconhecido|tom precisa/i.test(m)) return 5;
+  if (/porte do cliente/i.test(m)) return 2;
+  if (/regra |peso|cortes/i.test(m)) return 3;
+  if (/concorrente|categoria|exclus/i.test(m)) return 4;
+  return 1;
+}
+
 // ---------- nota
 
 export function somaDosPesos(regras) {
@@ -175,16 +273,21 @@ export function conferirRascunho(rascunho, opcoes) {
 
 // O perfil que vai para o servidor: textos aparados, listas sem repetição, regras na ordem do kit,
 // exclusões sem lista que não vale mais, modelos só para canais escolhidos (os outros ficam guardados).
-export function perfilParaSalvar(rascunho, opcoes) {
+export function perfilParaSalvar(rascunho, opcoes, original = null) {
   const p = copiar(rascunho);
   for (const campo of ['nome', 'empresa', 'oferta']) p.negocio[campo] = p.negocio[campo].replace(/\s+/g, ' ').trim();
   p.negocio.oferta = p.negocio.oferta.slice(0, LIMITE_DA_OFERTA);
   p.cliente.exemplo = p.cliente.exemplo.trim();
   p.abordagem.oferta_entrada = p.abordagem.oferta_entrada.trim();
+  // As regras que já estavam no perfil mantêm o lugar (no empate de pontos, vale a ordem do perfil).
+  // As que a pessoa acabou de ligar entram depois, na ordem do kit, para o resultado não depender da ordem dos cliques.
   const ordem = opcoes.regras.map((r) => r.id);
-  p.pontuacao.regras = p.pontuacao.regras
-    .filter((r) => ordem.includes(r.id))
-    .sort((x, y) => ordem.indexOf(x.id) - ordem.indexOf(y.id));
+  const antigas = original ? original.pontuacao.regras.map((r) => r.id) : [];
+  const validas = p.pontuacao.regras.filter((r) => ordem.includes(r.id));
+  p.pontuacao.regras = [
+    ...antigas.map((id) => validas.find((r) => r.id === id)).filter(Boolean),
+    ...validas.filter((r) => !antigas.includes(r.id)).sort((x, y) => ordem.indexOf(x.id) - ordem.indexOf(y.id)),
+  ];
   if (p.pontuacao.corte_a === undefined || p.pontuacao.corte_a === null) {
     delete p.pontuacao.corte_a;
     delete p.pontuacao.corte_b;

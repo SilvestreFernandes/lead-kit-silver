@@ -11,7 +11,8 @@ As buscas daqui sao de mentira: o "motor" devolve leads fictícios depois de uma
     python testes\\demo_painel.py --estado motor_desligado   (Docker ligado, motor desligado)
     python testes\\demo_painel.py --estado docker_parado     (Docker desligado)
     python testes\\demo_painel.py --estado perfil_ausente
-    python testes\\demo_painel.py --estado perfil_invalido
+    python testes\\demo_painel.py --estado perfil_invalido            (primeiro problema na etapa 1)
+    python testes\\demo_painel.py --estado perfil_invalido_mensagem   (primeiro problema na etapa 5)
     python testes\\demo_painel.py --estado sem_leads         (nenhuma busca feita ainda)
     python testes\\demo_painel.py --estado muitos            (650 leads, para testar "Mostrar mais")
     python testes\\demo_painel.py --estado regulado          (perfil de área regulada: aviso de conformidade)
@@ -42,7 +43,7 @@ from kit.ligar_motor import LigadorDoMotor  # noqa: E402
 from testes.fixtures import (GeoDeMentira, MotorDeMentira, csv_texto, leads_em_massa, linha,  # noqa: E402
                              perfil_ficticio)
 
-ESTADOS = ("normal", "motor_desligado", "docker_parado", "perfil_ausente", "perfil_invalido", "sem_leads",
+ESTADOS = ("normal", "motor_desligado", "docker_parado", "perfil_ausente", "perfil_invalido", "perfil_invalido_mensagem", "sem_leads",
            "buscando", "zero_resultado", "erro_cidade", "erro_no_meio", "muitos", "regulado", "tudo_excluido")
 
 
@@ -118,6 +119,10 @@ def montar(estado, porta, atraso=3.0):
     if estado == "perfil_invalido":
         perfil["negocio"]["oferta"] = ""
         perfil["mensagens"]["whatsapp"] = "Oi {apelido}"
+        (dados / "perfil.json").write_text(json.dumps(perfil), encoding="utf-8")
+    elif estado == "perfil_invalido_mensagem":
+        # só o modelo de mensagem está errado: o primeiro problema fica na etapa 5 da tela Minha oferta
+        perfil["mensagens"]["whatsapp"] = "Oi {apelido}, posso te mandar uma ideia?"
         (dados / "perfil.json").write_text(json.dumps(perfil), encoding="utf-8")
     elif estado != "perfil_ausente":
         perfil["negocio"].update({"nome": "Silvestre", "empresa": "BrandForge"})

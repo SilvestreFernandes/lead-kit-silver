@@ -175,8 +175,8 @@ export function montarBuscar(raiz, ctx) {
   const areaFormulario = el('div', {});
   const areaHistorico = el('div', {});
   raiz.append(
-    cabecalhoDaTela('Buscar leads', 'Escolha o tipo de negócio e a cidade. O painel busca no Google Maps e já dá nota a cada lead.'),
-    anuncio, areaMotor, areaProgresso, areaResumo, areaFormulario, areaHistorico);
+    cabecalhoDaTela('Buscar leads', 'Responda três perguntas. O painel busca no Google Maps e já dá nota a cada negócio.'),
+    anuncio, areaMotor, areaProgresso, areaFormulario, areaResumo, areaHistorico);
 
   // ---- estado do motor
   const motorNoAr = () => { const e = ctx.estado(); return !e || e.motor_no_ar !== false; };
@@ -227,11 +227,8 @@ export function montarBuscar(raiz, ctx) {
     ref.avisoIp = el('div', { class: 'aviso-ip', role: 'note', hidden: true },
       el('p', {}, TEXTO_AVISO_IP),
       el('button', { class: 'btn btn-small', type: 'button', onClick: () => { estado.avisoIpVisto = true; gravarAvisoIp(); atualizarFormulario(); } }, 'Entendi'));
-    ref.resumo = {
-      busca: el('dd', {}), local: el('dd', {}), tamanho: el('dd', {}), extras: el('dd', {}),
-    };
     ref.erroEnvio = el('div', { class: 'aviso-inline', role: 'alert', hidden: true });
-    ref.botao = el('button', { class: 'btn btn-primary btn-block', id: 'botao-buscar', type: 'submit' }, 'Buscar leads');
+    ref.botao = el('button', { class: 'btn btn-primary', id: 'botao-buscar', type: 'submit' }, 'Buscar leads');
     ref.nota = el('p', { class: 'estimativa' });
     ref.chipsCategoria = categorias.map((c) => el('button', { class: 'chip', type: 'button', onClick: () => {
       ref.categoria.value = c; estado.form.categoria = c; atualizarFormulario();
@@ -244,21 +241,22 @@ export function montarBuscar(raiz, ctx) {
     ref.cidade.addEventListener('input', () => { estado.form.cidade = ref.cidade.value; atualizarFormulario(); });
     ref.uf.addEventListener('change', () => { estado.form.uf = ref.uf.value; atualizarFormulario(); });
 
-    const formulario = el('form', { class: 'form', novalidate: true, onSubmit: (evento) => { evento.preventDefault(); enviar(); } },
-      el('div', { class: 'field' },
-        el('label', { class: 'label', for: 'busca-categoria' }, 'Tipo de negócio'),
+    const passo = (numero, titulo, ...conteudo) => el('section', { class: 'passo-busca', 'aria-labelledby': 'passo-' + numero },
+      el('div', { class: 'n', 'aria-hidden': 'true' }, String(numero)),
+      el('div', { class: 'corpo' }, el('h2', { class: 'titulo-passo', id: 'passo-' + numero }, titulo), ...conteudo));
+
+    const formulario = el('form', { class: 'form passos-busca', id: 'formulario-busca', novalidate: true, onSubmit: (evento) => { evento.preventDefault(); enviar(); } },
+      passo(1, el('label', { for: 'busca-categoria' }, 'Que tipo de negócio você quer achar?'),
         ref.categoria, ref.erros.categoria,
         ref.chipsCategoria.length ? el('div', { class: 'chips', 'aria-label': 'Sugestões do seu perfil' }, ref.chipsCategoria) : null,
         el('p', { class: 'hint' }, ref.chipsCategoria.length ? 'As sugestões vêm do seu perfil. Você pode escrever qualquer outro tipo.' : 'Escreva como você procuraria no Google Maps.')),
-      el('div', { class: 'field' },
-        el('span', { class: 'label' }, 'Onde'),
+      passo(2, 'Em qual cidade?',
         el('div', { class: 'row2' },
           el('div', {}, el('label', { class: 'hint', for: 'busca-uf' }, 'Estado'), ref.uf, ref.erros.uf),
           el('div', {}, el('label', { class: 'hint', for: 'busca-cidade' }, 'Cidade'), ref.cidade, ref.erros.cidade)),
         ref.chipsCidade.length ? el('div', { class: 'chips', 'aria-label': 'Regiões do seu perfil' }, ref.chipsCidade) : null,
         el('p', { class: 'hint' }, 'A busca cobre cerca de 10 km ao redor do centro da cidade.')),
-      el('div', { class: 'field' },
-        el('span', { class: 'label', id: 'rotulo-tamanho' }, 'Tamanho da busca'),
+      passo(3, el('span', { id: 'rotulo-tamanho' }, 'Quanto tempo você quer esperar?'),
         el('div', { class: 'seg', role: 'radiogroup', 'aria-labelledby': 'rotulo-tamanho' },
           opcoes.tamanhos.map((t) => opcaoDeTamanho(t, estado.form.tamanho === t.id)),
           (opcoes.tamanhos_em_breve || []).map((id) => [
@@ -267,38 +265,24 @@ export function montarBuscar(raiz, ctx) {
           ])),
         el('p', { class: 'hint' }, 'Os tempos são estimativas e podem variar. ' + TEXTO_RESULTADO_VARIA),
         ref.avisoIp),
-      el('div', { class: 'field' },
-        el('span', { class: 'label' }, 'Contatos extras'),
+      el('div', { class: 'extras-busca' },
+        el('span', { class: 'label' }, 'Contatos extras (opcional)'),
         el('label', { class: 'check', for: 'busca-email' }, ref.email,
           el('div', {}, el('b', {}, 'Procurar e-mails nos sites'),
-            el('span', {}, 'Deixa a busca bem mais lenta: em um teste nosso, levou cerca de 3 vezes mais. Só aparece e-mail que a empresa publicou no próprio site, e muitos negócios não publicam.')))));
+            el('span', {}, 'Deixa a busca bem mais lenta: em um teste nosso, levou cerca de 3 vezes mais. Só aparece e-mail que a empresa publicou no próprio site, e muitos negócios não publicam.')))),
+      el('div', { class: 'acao-busca' }, ref.erroEnvio, ref.botao, ref.nota));
 
-    const lateral = el('aside', { class: 'card summary', 'aria-label': 'Resumo da busca' },
-      el('h2', {}, 'Resumo'),
-      el('dl', {},
-        el('div', {}, el('dt', {}, 'Busca'), ref.resumo.busca),
-        el('div', {}, el('dt', {}, 'Local'), ref.resumo.local),
-        el('div', {}, el('dt', {}, 'Tamanho'), ref.resumo.tamanho),
-        el('div', {}, el('dt', {}, 'Extras'), ref.resumo.extras)),
-      ref.erroEnvio, ref.botao, ref.nota,
+    const avisos = el('div', { class: 'notas-busca' },
       el('div', { class: 'care' }, el('h3', {}, TEXTO_PRIVACIDADE.titulo),
         el('ul', {}, TEXTO_PRIVACIDADE.itens.map((i) => el('li', {}, i)))),
       el('div', { class: 'care' }, el('h3', {}, TEXTO_USO_RESPONSAVEL.titulo), el('p', {}, TEXTO_USO_RESPONSAVEL.texto)));
 
-    // o botão de enviar fica na lateral, mas pertence ao formulário
-    ref.botao.setAttribute('form', 'formulario-busca');
-    formulario.id = 'formulario-busca';
-    limpar(areaFormulario).append(el('div', { class: 'search-grid' }, el('div', { class: 'card' }, formulario), lateral));
+    limpar(areaFormulario).append(el('div', { class: 'card' }, formulario), avisos);
     atualizarFormulario();
   }
 
   function atualizarFormulario() {
     const f = estado.form;
-    const tamanho = estado.opcoes.tamanhos.find((t) => t.id === f.tamanho);
-    ref.resumo.busca.textContent = f.categoria.trim() || 'sem tipo definido';
-    ref.resumo.local.textContent = `${f.cidade.trim() || 'sem cidade'}${f.uf ? ', ' + f.uf : ''}`;
-    ref.resumo.tamanho.textContent = `${ROTULOS_DE_TAMANHO[f.tamanho]}, ${tamanho.tempo_estimado}`;
-    ref.resumo.extras.textContent = f.email ? 'E-mails nos sites' : 'Nenhum';
     ref.avisoIp.hidden = !(f.tamanho !== 'rapida' && !estado.avisoIpVisto);
     for (const chip of ref.chipsCategoria) chip.setAttribute('aria-pressed', String(chip.textContent.toLowerCase() === f.categoria.trim().toLowerCase()));
     for (const chip of ref.chipsCidade) chip.setAttribute('aria-pressed', String(chip.textContent === `${f.cidade.trim()}-${f.uf}`));
@@ -440,7 +424,7 @@ export function montarBuscar(raiz, ctx) {
     const busca = estado.ativa || { categoria: '...', cidade: '...', uf: '', tamanho: 'rapida', etapa: 'Começando...' };
     if (!ref.progresso) {
       ref.progresso = criarProgresso(busca);
-      limpar(areaProgresso).append(ref.progresso.no, el('div', { style: 'height:24px' }));
+      limpar(areaProgresso).append(ref.progresso.no);
     }
     ref.progresso.atualizar(busca, { semResposta: estado.semResposta });
     // Leitor de tela: só quando a etapa ou o ponto mudam, nunca a cada segundo do relógio.

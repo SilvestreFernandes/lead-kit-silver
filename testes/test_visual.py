@@ -13,7 +13,7 @@ HTML = (PAINEL / "index.html").read_text(encoding="utf-8")
 
 # Seletores que podem usar a fonte monoespaçada. Só números e comandos, nunca rótulos.
 MONO_PERMITIDO = {
-    ":root", ".num, .count, code", ".passos li::before", ".pill em", ".nota .pts b", ".why li b",
+    ":root", ".num, .count, code", ".passos li::before", ".pill em", ".nota .pts b", ".why li b", ".passo-busca .n", ".etapa .n", ".seg-peso label b.num",
 }
 
 
@@ -102,6 +102,10 @@ class TestFormasDaNota(unittest.TestCase):
         self.assertNotIn("50%", formas["B"])                    # quadrado arredondado
         cores = {letra: corpos[f".nota.{letra}"] for letra in "ABC"}
         self.assertEqual(len(set(cores.values())), 3)
+        # A é cheia e B é só contorno: a diferença entre as duas não depende só da cor.
+        self.assertIn("--cor-fundo: var(--good)", cores["A"])
+        self.assertIn("--cor-fundo: transparent", cores["B"])
+        self.assertIn("border-width: 3px", formas["B"])
 
     def test_c_nao_usa_vermelho_nem_a_cor_de_erro(self):
         c = next(corpo for s, corpo in regras_do_css() if s == ".nota.C")

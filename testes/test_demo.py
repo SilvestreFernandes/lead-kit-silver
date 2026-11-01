@@ -26,8 +26,15 @@ class TestDemoDoPainel(unittest.TestCase):
                 srv = self.subir(estado)
                 d = self.ler(srv, "/api/estado")
                 self.assertEqual(d["motor_no_ar"], estado not in ("motor_desligado", "docker_parado"))
-                esperado = {"perfil_ausente": (False, False), "perfil_invalido": (True, False)}.get(estado, (True, True))
+                esperado = {"perfil_ausente": (False, False), "perfil_invalido": (True, False),
+                            "perfil_invalido_mensagem": (True, False)}.get(estado, (True, True))
                 self.assertEqual((d["perfil"]["existe"], d["perfil"]["valido"]), esperado)
+
+    def test_perfil_invalido_mensagem_tem_o_primeiro_problema_no_modelo_de_mensagem(self):
+        srv = self.subir("perfil_invalido_mensagem")
+        erros = self.ler(srv, "/api/estado")["perfil"]["erros"]
+        self.assertTrue(erros[0].startswith("A mensagem de WhatsApp"), erros)
+        self.assertFalse(any("negocio.oferta" in e for e in erros))
 
     def test_normal_tem_excluidos_um_lead_acompanhado_e_um_nome_malicioso(self):
         srv = self.subir("normal")
